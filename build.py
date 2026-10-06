@@ -2,7 +2,7 @@
 """Fetch, patch, build and start ONLYOFFICE Desktop Editors with the Japanese patches.
 
     python3 build.py fetch     # get ONLYOFFICE sdkjs and the Linux desktop package
-    python3 build.py build     # apply patches/sdkjs/*.patch and build the word editor
+    python3 build.py build     # apply patches/sdkjs/*.patch to the tag and build the word editor
     python3 build.py install   # put the build into the unpacked package
     python3 build.py restore   # put the original word editor back
     python3 build.py run [FILE...]
@@ -79,11 +79,19 @@ def fetch() -> None:
 def build() -> None:
     branches = subprocess.run(["git", "-C", str(SDKJS), "branch", "--list", BRANCH], capture_output=True, text=True, check=True).stdout
     if not branches.strip():
-        run("git", "-C", str(SDKJS), "switch", "-q", "-c", BRANCH)
+        # The branch starts from the official tag, whatever is checked out now
+        run("git", "-C", str(SDKJS), "switch", "-q", "-c", BRANCH, SDKJS_TAG)
         patches = sorted(str(p) for p in PATCHES.glob("*.patch"))
         # git am needs an identity for the commits it makes in the local clone
-        run("git", "-C", str(SDKJS), "-c", "user.name=ja-office-fixes", "-c", "user.email=ja-office-fixes@localhost",
-            "am", "-q", "--3way", *patches)
+        try:
+            run("git", "-C", str(SDKJS), "-c", "user.name=ja-office-fixes", "-c", "user.email=ja-office-fixes@localhost",
+                "am", "-q", "--3way", *patches)
+        except subprocess.CalledProcessError:
+            # Leave the clone as it was, so the next run starts again from the tag
+            subprocess.run(["git", "-C", str(SDKJS), "am", "--abort"])
+            run("git", "-C", str(SDKJS), "switch", "-q", "--detach", SDKJS_TAG)
+            run("git", "-C", str(SDKJS), "branch", "-D", BRANCH)
+            raise
     else:
         run("git", "-C", str(SDKJS), "switch", "-q", BRANCH)
     run(sys.executable, "build.py", "--product", "word", "--desktop", cwd=SDKJS / "build")
