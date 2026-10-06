@@ -1,6 +1,7 @@
-# nihongo-patch
+# ja-office-fixes
 
-ONLYOFFICE Desktop Editors の文書エディターで、日本語の行の折り返しと縦書きを直すパッチです。
+ONLYOFFICE と Euro-Office の文書エディターで、日本語の行の折り返しと縦書きを直すパッチです。
+今は ONLYOFFICE Desktop Editors 9.4.0 に当てて使います。
 ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは関係のない、独自の取り組みです。
 
 [English](#english)

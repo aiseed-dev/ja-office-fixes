@@ -54,7 +54,7 @@ APP = PKG / "opt/onlyoffice/desktopeditors"
 WORD = APP / "editors/sdkjs/word"
 ORIG = PKG / "orig-sdkjs-word"
 PATCHES = ROOT / "patches/sdkjs"
-BRANCH = "nihongo"
+BRANCH = "ja-office-fixes"
 
 
 def run(*cmd: str, cwd: pathlib.Path | None = None) -> None:
@@ -82,7 +82,7 @@ def build() -> None:
         run("git", "-C", str(SDKJS), "switch", "-q", "-c", BRANCH)
         patches = sorted(str(p) for p in PATCHES.glob("*.patch"))
         # git am needs an identity for the commits it makes in the local clone
-        run("git", "-C", str(SDKJS), "-c", "user.name=nihongo-patch", "-c", "user.email=nihongo-patch@localhost",
+        run("git", "-C", str(SDKJS), "-c", "user.name=ja-office-fixes", "-c", "user.email=ja-office-fixes@localhost",
             "am", "-q", "--3way", *patches)
     else:
         run("git", "-C", str(SDKJS), "switch", "-q", BRANCH)
