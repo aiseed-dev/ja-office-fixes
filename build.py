@@ -2,10 +2,10 @@
 """Fetch, patch, build and start ONLYOFFICE Desktop Editors with the Japanese patches.
 
     python3 build.py fetch     # get ONLYOFFICE sdkjs and the Linux desktop package
-    python3 build.py build     # apply patches/sdkjs/*.patch to the tag and build the word editor;
+    python3 build.py build     # apply patches/sdkjs/*.patch to the tag and build the editors;
                                # when the patches or the tag changed, apply them again
     python3 build.py install   # put the build into the unpacked package
-    python3 build.py restore   # put the original word editor back
+    python3 build.py restore   # put the original editors back
     python3 build.py run [FILE...]
     python3 build.py menu      # add the patched app to the desktop menu, and open documents with it
     python3 build.py unmenu    # take it out of the menu and give the documents back
@@ -16,8 +16,8 @@ Everything goes into work/ next to this file:
 * work/sdkjs: ONLYOFFICE sdkjs at the tag of the desktop release, cloned
   with --depth 1 (about 320 MB)
 * work/desktop: the official Linux package (onlyoffice-desktopeditors-x64.tar.xz,
-  about 345 MB) unpacked; the original word editor is kept in
-  work/desktop/orig-sdkjs-word
+  about 345 MB) unpacked; the original editors are kept in
+  work/desktop/orig-sdkjs-word and work/desktop/orig-sdkjs-cell
 
 The menu entry is ja-office-fixes.desktop in ~/.local/share/applications
 (or $XDG_DATA_HOME/applications). It lists the file types of the package's
@@ -27,8 +27,8 @@ double-click on a docx opens it. The defaults go into ~/.config/mimeapps.list
 with xdg-mime; unmenu takes them out again. These two files are the only
 ones written outside work/.
 
-Only the word editor (documents) is changed. The spreadsheet and
-presentation editors are the official ones.
+Only the document (word) and spreadsheet (cell) editors are changed. The
+presentation editor is the official one.
 
 ## What we ran into
 
@@ -63,8 +63,8 @@ WORK = ROOT / "work"
 SDKJS = WORK / "sdkjs"
 PKG = WORK / "desktop"
 APP = PKG / "opt/onlyoffice/desktopeditors"
-WORD = APP / "editors/sdkjs/word"
-ORIG = PKG / "orig-sdkjs-word"
+# The editors the patches change
+PRODUCTS = ("word", "cell")
 PATCHES = ROOT / "patches/sdkjs"
 BRANCH = "ja-office-fixes"
 # The patches_id() of the patches on BRANCH, kept inside the clone's .git
@@ -144,27 +144,37 @@ def build() -> None:
             git("branch", "-D", BRANCH)
             raise
         STAMP.write_text(want + "\n")
-    run(sys.executable, "build.py", "--product", "word", "--desktop", cwd=SDKJS / "build")
-    print("built", SDKJS / "deploy/sdkjs/word")
+    products = [arg for name in PRODUCTS for arg in ("--product", name)]
+    run(sys.executable, "build.py", *products, "--desktop", cwd=SDKJS / "build")
+    print("built", ", ".join(str(SDKJS / "deploy/sdkjs" / name) for name in PRODUCTS))
 
 
 def install() -> None:
-    if not ORIG.exists():
-        ORIG.mkdir(parents=True)
-        for f in WORD.iterdir():
-            shutil.copy2(f, ORIG / f.name)
-    for name in ("sdk-all-min.js", "sdk-all.js"):
-        shutil.copy2(SDKJS / "deploy/sdkjs/word" / name, WORD / name)
-    for cache in ("sdk-all.bin", "sdk-all.cache"):
-        (WORD / cache).unlink(missing_ok=True)
-    print("installed the patched word editor into", WORD)
+    for name in PRODUCTS:
+        editor = APP / "editors/sdkjs" / name
+        orig = PKG / f"orig-sdkjs-{name}"
+        if not orig.exists():
+            orig.mkdir(parents=True)
+            for f in editor.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, orig / f.name)
+        for script in ("sdk-all-min.js", "sdk-all.js"):
+            shutil.copy2(SDKJS / "deploy/sdkjs" / name / script, editor / script)
+        for cache in ("sdk-all.bin", "sdk-all.cache"):
+            (editor / cache).unlink(missing_ok=True)
+        print("installed the patched editor into", editor)
 
 
 def restore() -> None:
-    (WORD / "sdk-all.cache").unlink(missing_ok=True)
-    for f in ORIG.iterdir():
-        shutil.copy2(f, WORD / f.name)
-    print("restored the original word editor into", WORD)
+    for name in PRODUCTS:
+        editor = APP / "editors/sdkjs" / name
+        orig = PKG / f"orig-sdkjs-{name}"
+        if not orig.exists():
+            continue
+        (editor / "sdk-all.cache").unlink(missing_ok=True)
+        for f in orig.iterdir():
+            shutil.copy2(f, editor / f.name)
+        print("restored the original editor into", editor)
 
 
 def start(files: list[str]) -> None:

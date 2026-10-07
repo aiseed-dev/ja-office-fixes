@@ -22,6 +22,12 @@ Modifications (2026-10-06):
 - `tests/word/document-calculation/paragraph/paragraph-lines.js`: tests for
   Japanese line breaking.
 
+Modifications (2026-10-08):
+
+- `common/NumFormat.js`: the Japanese era format codes g, e and r, and
+  G/標準 as General.
+- `tests/cell/spreadsheet-calculation/NumFormatParse.js`: tests for them.
+
 ## Trademarks
 
 ONLYOFFICE is a trademark of Ascensio System SIA. This project is not

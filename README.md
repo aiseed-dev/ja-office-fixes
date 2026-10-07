@@ -1,6 +1,6 @@
 # ja-office-fixes
 
-ONLYOFFICE と Euro-Office の文書エディターで、日本語の行の折り返しと縦書きを直すパッチです。
+ONLYOFFICE と Euro-Office の文書エディターと表計算で、日本語の行の折り返し・縦書き・和暦を直すパッチです。
 今は ONLYOFFICE Desktop Editors 9.4.0 に当てて使います。
 ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは関係のない、独自の取り組みです。
 
@@ -29,6 +29,20 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 括弧・長音・欧文は、Word と同じく回したままにします。「、」「。」は字の枠の右上に寄せます。
 
 ![表のセルの縦書き](docs/images/cell.png) ![テキストボックスの縦書き](docs/images/box.png)
+
+### 和暦(表計算)
+
+日本の Excel の和暦の表示形式で、日付を和暦で表示します。
+`[$-411]ggge"年"m"月"d"日"` は「令和8年10月6日」、`[$-411]ge.m.d` は「R8.10.6」になります。
+日本の Excel の組み込みの日付の表示形式も、この書き方です。
+今の ONLYOFFICE は、「ggg年m月d日」や「g46301.m.d」のように表示が壊れます。
+
+- `g` は元号の頭文字(R)、`gg` は元号の 1 字目(令)、`ggg` は元号(令和)です。
+- `e` は元号の年、`ee` は 2 桁の元号の年です。`r` は `ee`、`rr` は `gggee` と同じです。
+- 表示形式に `[$-411]` が無いときは、ブックの言語が日本語の場合に和暦にします。
+- 表示形式の「G/標準」を、「標準」として扱います。
+
+![和暦の直す前と直した後](docs/images/wareki.png)
 
 ## 使い方(Linux)
 
@@ -71,10 +85,10 @@ python3 build.py all
 
 このコマンドは、次の 5 つを順に行います。
 
-1. ONLYOFFICE の文書エディターのプログラム(sdkjs、約 320MB)を GitHub から取ってきます。
+1. ONLYOFFICE のエディターのプログラム(sdkjs、約 320MB)を GitHub から取ってきます。
 2. 公式の Linux 版 ONLYOFFICE Desktop Editors 9.4.0(約 345MB)を GitHub から取ってきて、展開します。
-3. sdkjs にパッチを当てて、文書エディターを組み立てます。
-4. 展開した Linux 版の文書エディターを、組み立てた物に入れ替えます。
+3. sdkjs にパッチを当てて、文書エディターと表計算のエディターを組み立てます。
+4. 展開した Linux 版の文書エディターと表計算のエディターを、組み立てた物に入れ替えます。
 5. メニューに「ja-office-fixes」を足します(`~/.local/share/applications/ja-office-fixes.desktop`)。
    あわせて、文書(docx・doc・odt・rtf)をダブルクリックしたときに開くアプリを、
    ja-office-fixes にします(`~/.config/mimeapps.list`)。
@@ -102,7 +116,7 @@ python3 build.py run 文書.docx
 ```
 
 起動した後は、普通の ONLYOFFICE と同じに使えます。
-直してあるのは文書(docx など)だけです。表計算とプレゼンテーションは公式のままです。
+直してあるのは文書(docx など)と表計算(xlsx など)です。プレゼンテーションは公式のままです。
 
 ### パッチを新しくする
 
@@ -121,7 +135,7 @@ ja-office-fixes を開いているときは、すべての窓を閉じてから�
 
 ### 元に戻す
 
-パッチを当てる前の、公式の文書エディターに戻すときは、次のコマンドを使います。
+パッチを当てる前の、公式のエディターに戻すときは、次のコマンドを使います。
 
 ```bash
 python3 build.py restore
@@ -146,19 +160,23 @@ ONLYOFFICE Desktop Editors 9.4.0 です(sdkjs のタグ v9.4.0.129)。
 
 ## 確かめ方
 
-- `tests/documents/` の docx を、直す前と直した後の ONLYOFFICE で印刷して比べました(上の画像)。
+- `tests/documents/` の docx と xlsx を、直す前と直した後の ONLYOFFICE で印刷して比べました(上の画像)。
 - sdkjs にもともとある組版の試験(段落・表・ハイフネーション・文字の組み立て・図の配置)を、node で回せるようにしました。
   パッチを当てても、すべて通ります。足した日本語の試験は、パッチの前は落ち、後は通ります。
 
+- 表計算の表示形式の試験も、node で回せます。和暦の試験を足しました。
+
 ```bash
 node tests/sdkjs_node/qunit.js work/sdkjs/tests/word/document-calculation/paragraph/paragraph-lines.js
+SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsheet-calculation/NumFormatParse.js
 ```
 
 ## まだ直していないこと
 
 - ページ全体の縦書き(縦書きの節)。docx から読む変換器(core)の段階で設定が消えるので、sdkjs だけでは直せません。
 - 縦書きの「、」「。」は位置を寄せただけで、書体の縦書き用の字形は使っていません。
-- ルビ、傍点、和暦、漢数字、ふりがなの保存など。
+- 元年の表示。`[$-ja-JP-x-gannen]` の表示形式も、元号の最初の年は「1年」と表示します。
+- ルビ、傍点、漢数字、ふりがなの保存など。
 
 ## ライセンスと表示
 
@@ -175,8 +193,8 @@ node tests/sdkjs_node/qunit.js work/sdkjs/tests/word/document-calculation/paragr
 
 ## English
 
-Patches for the document editor of ONLYOFFICE Desktop Editors that fix Japanese line breaking and
-vertical writing. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
+Patches for the document and spreadsheet editors of ONLYOFFICE Desktop Editors that fix Japanese
+line breaking, vertical writing and dates in the Japanese era. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
 
 - Lines break between kana (they used to move to the next line as one word).
 - A character that may not begin a line (。、」 …) hangs one character past the line end, as in Word,
@@ -184,6 +202,9 @@ vertical writing. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
 - Word's standard Japanese kinsoku characters are added to the "cannot begin a line" table.
 - In vertical table cells (`tbRl`) and vertical text boxes (`eaVert`), ideographs, kana and
   full-width forms stand upright; brackets, dashes and Latin text stay turned with the line.
+- Spreadsheet dates in the Japanese era: `[$-411]ggge"年"m"月"d"日"` shows 令和8年10月6日 and
+  `[$-411]ge.m.d` shows R8.10.6, following ECMA-376 Part 1, 18.8.31 (g, gg, ggg, e, ee, r, rr).
+  `G/標準` is read as General.
 
 ### Use (Linux)
 
@@ -200,13 +221,13 @@ python3 build.py all
 ```
 
 `python3 build.py all` fetches ONLYOFFICE sdkjs (tag v9.4.0.129, about 320 MB) and the official
-Linux package 9.4.0 (about 345 MB) into `work/`, applies the patches, builds the document editor and
-puts it into the package. It then adds "ja-office-fixes" to the desktop menu and makes it the app
+Linux package 9.4.0 (about 345 MB) into `work/`, applies the patches, builds the document and spreadsheet
+editors and puts them into the package. It then adds "ja-office-fixes" to the desktop menu and makes it the app
 that opens documents (docx, doc, odt, rtf) on a double-click. Spreadsheets and presentations keep
-the app they had; their editors are the official ones.
+the app they had; the presentation editor is the official one.
 
 - Start it from the menu, by double-clicking a document, or with `python3 build.py run [FILE]`.
-- `python3 build.py restore` puts the official document editor back; `python3 build.py install`
+- `python3 build.py restore` puts the official editors back; `python3 build.py install`
   puts the patched one in again.
 - After `git pull`, `python3 build.py all` applies the patches again when they changed. Close the app
   and start it again to use them.
