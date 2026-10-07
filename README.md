@@ -1,6 +1,6 @@
 # ja-office-fixes
 
-ONLYOFFICE と Euro-Office の文書エディターと表計算で、日本語の行の折り返し・縦書き・和暦を直すパッチです。
+ONLYOFFICE と Euro-Office の文書エディターと表計算で、日本語の行の折り返し・縦書き・和暦・関数を直すパッチです。
 今は ONLYOFFICE Desktop Editors 9.4.0 に当てて使います。
 ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは関係のない、独自の取り組みです。
 
@@ -43,6 +43,23 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 - 表示形式の「G/標準」を、「標準」として扱います。
 
 ![和暦の直す前と直した後](docs/images/wareki.png)
+
+### 日本語の関数(表計算)
+
+| 関数 | 今の ONLYOFFICE | 直した後 |
+|---|---|---|
+| `ASC("エクセル")` | エクセル(変わらない) | ｴｸｾﾙ |
+| `ASC("ｱｲｳ")` | 制御文字になる | ｱｲｳ(変わらない) |
+| `JIS("ｴｸｾﾙ")` | ｴｸｾﾙ | エクセル |
+| `JIS("あいう")` | 別の字になる | あいう(変わらない) |
+| `LENB("あいう")` | 3 | 6 |
+| `LEFTB("あいう",2)` | あい | あ |
+| `VALUE("１２３")` | #VALUE! | 123 |
+
+- ASC と JIS は、英数字・記号・スペース・片仮名の全角と半角を変えます。濁点の付いた字は、全角の 1 字と半角の 2 字(ガ、ｶﾞ)で変わります。
+- LENB・LEFTB・RIGHTB・MIDB・REPLACEB・FINDB・SEARCHB は、日本語の文字コード(シフト JIS)のバイトで数えます。
+  英数字と半角の片仮名は 1 バイト、ほかの字は 2 バイトです。2 バイトの字の途中で切れるときは、その半分をスペースにします。
+- VALUE は、全角の数字と記号も読みます。
 
 ## 使い方(Linux)
 
@@ -164,11 +181,13 @@ ONLYOFFICE Desktop Editors 9.4.0 です(sdkjs のタグ v9.4.0.129)。
 - sdkjs にもともとある組版の試験(段落・表・ハイフネーション・文字の組み立て・図の配置)を、node で回せるようにしました。
   パッチを当てても、すべて通ります。足した日本語の試験は、パッチの前は落ち、後は通ります。
 
-- 表計算の表示形式の試験も、node で回せます。和暦の試験を足しました。
+- 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦と日本語の関数の試験を足しました。
+  文字列の関数の試験のうち「TEXT」の 1 件は、パッチを当てる前から node では落ちます。
 
 ```bash
 node tests/sdkjs_node/qunit.js work/sdkjs/tests/word/document-calculation/paragraph/paragraph-lines.js
 SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsheet-calculation/NumFormatParse.js
+SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js
 ```
 
 ## まだ直していないこと
@@ -194,7 +213,7 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 ## English
 
 Patches for the document and spreadsheet editors of ONLYOFFICE Desktop Editors that fix Japanese
-line breaking, vertical writing and dates in the Japanese era. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
+line breaking, vertical writing, dates in the Japanese era and Japanese text functions. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
 
 - Lines break between kana (they used to move to the next line as one word).
 - A character that may not begin a line (。、」 …) hangs one character past the line end, as in Word,
@@ -205,6 +224,9 @@ line breaking, vertical writing and dates in the Japanese era. Based on ONLYOFFI
 - Spreadsheet dates in the Japanese era: `[$-411]ggge"年"m"月"d"日"` shows 令和8年10月6日 and
   `[$-411]ge.m.d` shows R8.10.6, following ECMA-376 Part 1, 18.8.31 (g, gg, ggg, e, ee, r, rr).
   `G/標準` is read as General.
+- ASC and JIS convert full-width and half-width ASCII, spaces and katakana (ASC("エクセル") = ｴｸｾﾙ,
+  JIS("ｴｸｾﾙ") = エクセル). LENB, LEFTB, RIGHTB, MIDB, REPLACEB, FINDB and SEARCHB count the bytes of
+  code page 932 (LENB("あいう") = 6). VALUE reads full-width digits.
 
 ### Use (Linux)
 

@@ -27,6 +27,11 @@ Modifications (2026-10-08):
 - `common/NumFormat.js`: the Japanese era format codes g, e and r, and
   G/標準 as General.
 - `tests/cell/spreadsheet-calculation/NumFormatParse.js`: tests for them.
+- `cell/model/FormulaObjects/textanddataFunctions.js`: ASC and JIS for
+  Japanese text, bytes of code page 932 in LENB, LEFTB, RIGHTB, MIDB,
+  REPLACEB, FINDB and SEARCHB, and full-width digits in VALUE.
+- `tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js`:
+  tests for them; five ASC expectations that recorded the old output.
 
 ## Trademarks
 
