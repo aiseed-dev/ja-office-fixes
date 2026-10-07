@@ -34,8 +34,17 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 
 このリポジトリは、直した ONLYOFFICE そのものは配っていません。
 配っているのは、公式の ONLYOFFICE を取ってきて、手元でパッチを当てるスクリプト(`build.py`)です。
-できあがった ONLYOFFICE は、このリポジトリのフォルダーの中の `work/` に置かれます。
-すでにパソコンに入れてある ONLYOFFICE は、書き換えません。
+
+### ONLYOFFICE はどうするか
+
+- ONLYOFFICE を先にインストールする必要はありません。
+  `build.py` が公式の Linux 版を GitHub から取ってきて、`work/` の中に展開します。
+- すでに ONLYOFFICE をインストールしている場合も、そのままにしておきます。
+  アンインストールする必要はなく、`build.py` はインストール済みの ONLYOFFICE を書き換えません。
+- パッチを当てた ONLYOFFICE は、インストール済みの物とは別の、もう 1 つの ONLYOFFICE になります。
+  使うときは、下の「3. 起動する」のとおり `python3 build.py run` で起動します。
+- メニューのアイコンや、ファイルのダブルクリックで開くのは、インストール済みの公式の ONLYOFFICE です。
+  そちらは直っていません。
 
 ### 要る物
 
