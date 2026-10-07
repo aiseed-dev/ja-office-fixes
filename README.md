@@ -32,18 +32,71 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 
 ## 使い方(Linux)
 
-Python 3.12 以上と git が要ります。
+このリポジトリは、直した ONLYOFFICE そのものは配っていません。
+配っているのは、公式の ONLYOFFICE を取ってきて、手元でパッチを当てるスクリプト(`build.py`)です。
+できあがった ONLYOFFICE は、このリポジトリのフォルダーの中の `work/` に置かれます。
+すでにパソコンに入れてある ONLYOFFICE は、書き換えません。
+
+### 要る物
+
+- Linux(x86_64)
+- git
+- Python 3.12 以上
+- ディスクの空き 約 2.1GB
+
+### 1. このリポジトリを取ってくる
 
 ```bash
-python3 build.py all    # 公式の sdkjs と Linux 版を取り、パッチを当てて組み立て、差し替えます
-python3 build.py run    # 起動します
+git clone https://github.com/aiseed-dev/ja-office-fixes.git
+cd ja-office-fixes
 ```
 
-`work/` の下に、ONLYOFFICE の sdkjs(約 210MB)と、公式の Linux 版(約 345MB)を置きます。
-直すのは文書エディターだけです。表計算とプレゼンテーションは公式のままです。
-元に戻すときは `python3 build.py restore` を使います。
+### 2. 組み立てる
 
-対象の版は ONLYOFFICE Desktop Editors 9.4.0 です(sdkjs のタグ v9.4.0.129)。
+```bash
+python3 build.py all
+```
+
+このコマンドは、次の 4 つを順に行います。
+
+1. ONLYOFFICE の文書エディターのプログラム(sdkjs、約 320MB)を GitHub から取ってきます。
+2. 公式の Linux 版 ONLYOFFICE Desktop Editors 9.4.0(約 345MB)を GitHub から取ってきて、展開します。
+3. sdkjs にパッチを当てて、文書エディターを組み立てます。
+4. 展開した Linux 版の文書エディターを、組み立てた物に入れ替えます。
+
+取ってきた物は `work/` に残るので、2 回目からは取り直しません。
+
+### 3. 起動する
+
+```bash
+python3 build.py run
+```
+
+文書を開いて起動するときは、文書のファイル名を後ろに付けます。
+
+```bash
+python3 build.py run 文書.docx
+```
+
+起動した後は、普通の ONLYOFFICE と同じに使えます。
+直してあるのは文書(docx など)だけです。表計算とプレゼンテーションは公式のままです。
+
+### 元に戻す
+
+パッチを当てる前の、公式の文書エディターに戻すときは、次のコマンドを使います。
+
+```bash
+python3 build.py restore
+```
+
+もう一度パッチを当てた物にするときは、`python3 build.py install` を使います。
+どちらの場合も、起動は `python3 build.py run` です。
+
+使わなくなったときは、このリポジトリのフォルダーを消します。
+
+### 対象の版
+
+ONLYOFFICE Desktop Editors 9.4.0 です(sdkjs のタグ v9.4.0.129)。
 パッチは Euro-Office の sdkjs にもそのまま当たります。
 
 ## 確かめ方
