@@ -82,6 +82,8 @@ python3 build.py all
 
 取ってきた物は `work/` に残るので、2 回目からは取り直しません。
 
+このコマンドが終われば、使えるようになっています。ほかにすることはありません。
+
 ### 3. 起動する
 
 メニューの「ja-office-fixes」から起動します。
@@ -113,6 +115,9 @@ python3 build.py all
 
 `build.py` は、パッチが変わったことを見つけて、公式の sdkjs にパッチを当て直します。
 パッチが変わっていなければ、当て直しません。
+
+ja-office-fixes を開いているときは、すべての窓を閉じてから、もう一度起動します。
+新しいパッチは、起動し直した後に効きます。
 
 ### 元に戻す
 
@@ -203,7 +208,8 @@ the app they had; their editors are the official ones.
 - Start it from the menu, by double-clicking a document, or with `python3 build.py run [FILE]`.
 - `python3 build.py restore` puts the official document editor back; `python3 build.py install`
   puts the patched one in again.
-- After `git pull`, `python3 build.py all` applies the patches again when they changed.
+- After `git pull`, `python3 build.py all` applies the patches again when they changed. Close the app
+  and start it again to use them.
 - `python3 build.py menu` makes the menu entry again, for example after moving the folder.
 - To stop using it, run `python3 build.py unmenu`, which removes the menu entry and gives the
   documents back to the system's default app, then delete the folder.
