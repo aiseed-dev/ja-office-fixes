@@ -13,7 +13,7 @@
 Everything goes into work/ next to this file:
 
 * work/sdkjs: ONLYOFFICE sdkjs at the tag of the desktop release, cloned
-  with --depth 1 (about 210 MB)
+  with --depth 1 (about 320 MB)
 * work/desktop: the official Linux package (onlyoffice-desktopeditors-x64.tar.xz,
   about 345 MB) unpacked; the original word editor is kept in
   work/desktop/orig-sdkjs-word
@@ -184,9 +184,12 @@ def menu() -> None:
     MENU.parent.mkdir(parents=True, exist_ok=True)
     MENU.write_text(entry)
     refresh_menu()
-    run("xdg-mime", "default", MENU.name, *DOCUMENTS)
     print("added to the menu:", MENU)
-    print("documents (docx, doc, odt, rtf) now open in it with a double-click")
+    if shutil.which("xdg-mime"):
+        run("xdg-mime", "default", MENU.name, *DOCUMENTS)
+        print("documents (docx, doc, odt, rtf) now open in it with a double-click")
+    else:
+        print("xdg-mime (xdg-utils) is not installed: documents still open in the app they had")
 
 
 def mime_types() -> list[str]:

@@ -54,6 +54,7 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 - git
 - Python 3.12 以上
 - ディスクの空き 約 2.1GB
+- xdg-utils(ダブルクリックで開くアプリを設定するのに使います。無いときは、この設定だけを飛ばします)
 
 ### 1. このリポジトリを取ってくる
 
@@ -167,9 +168,33 @@ vertical writing. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
 - In vertical table cells (`tbRl`) and vertical text boxes (`eaVert`), ideographs, kana and
   full-width forms stand upright; brackets, dashes and Latin text stay turned with the line.
 
-`python3 build.py all` fetches ONLYOFFICE sdkjs (tag v9.4.0.129) and the official Linux package
-9.4.0, applies the patches, builds the word editor and puts it into the package;
-`python3 build.py run` starts it. No modified binaries are distributed.
+### Use (Linux)
+
+No modified binaries are distributed. `build.py` downloads the official ONLYOFFICE and applies the
+patches on your machine. You do not need to install ONLYOFFICE first, and an installed ONLYOFFICE
+is not changed; you may uninstall it.
+
+You need Linux (x86_64), git, Python 3.12 or later and about 2.1 GB of free disk space.
+
+```bash
+git clone https://github.com/aiseed-dev/ja-office-fixes.git
+cd ja-office-fixes
+python3 build.py all
+```
+
+`python3 build.py all` fetches ONLYOFFICE sdkjs (tag v9.4.0.129, about 320 MB) and the official
+Linux package 9.4.0 (about 345 MB) into `work/`, applies the patches, builds the document editor and
+puts it into the package. It then adds "ja-office-fixes" to the desktop menu and makes it the app
+that opens documents (docx, doc, odt, rtf) on a double-click. Spreadsheets and presentations keep
+the app they had; their editors are the official ones.
+
+- Start it from the menu, by double-clicking a document, or with `python3 build.py run [FILE]`.
+- `python3 build.py restore` puts the official document editor back; `python3 build.py install`
+  puts the patched one in again.
+- `python3 build.py menu` makes the menu entry again, for example after moving the folder.
+- To stop using it, run `python3 build.py unmenu`, which removes the menu entry and gives the
+  documents back to the system's default app, then delete the folder.
+- The patched app is not updated automatically.
 
 The patches are AGPL-3.0, like the code they change. ONLYOFFICE is a trademark of Ascensio System SIA.
 The first patch is the change of ONLYOFFICE/sdkjs#4885 by Yuito Murase (zeptometer), with tests.
