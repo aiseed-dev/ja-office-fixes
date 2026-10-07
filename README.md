@@ -39,12 +39,13 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 
 - ONLYOFFICE を先にインストールする必要はありません。
   `build.py` が公式の Linux 版を GitHub から取ってきて、`work/` の中に展開します。
-- すでに ONLYOFFICE をインストールしている場合も、そのままにしておきます。
-  アンインストールする必要はなく、`build.py` はインストール済みの ONLYOFFICE を書き換えません。
-- パッチを当てた ONLYOFFICE は、インストール済みの物とは別の、もう 1 つの ONLYOFFICE になります。
-  使うときは、下の「3. 起動する」のとおり `python3 build.py run` で起動します。
-- メニューのアイコンや、ファイルのダブルクリックで開くのは、インストール済みの公式の ONLYOFFICE です。
-  そちらは直っていません。
+- パッチを当てた ONLYOFFICE は、メニューに「ja-office-fixes」という名前で入ります。
+- すでに ONLYOFFICE をインストールしている場合は、アンインストールしてかまいません。
+  残しておいても、パッチを当てた物とは別に動きます。
+  `build.py` は、インストール済みの ONLYOFFICE を書き換えません。
+- インストール済みの ONLYOFFICE を残した場合、メニューの「ONLYOFFICE」や、ファイルのダブルクリックで
+  開くのは、そちらの直っていない ONLYOFFICE です。
+- パッチを当てた ONLYOFFICE は、自動では新しい版になりません。
 
 ### 要る物
 
@@ -66,16 +67,21 @@ cd ja-office-fixes
 python3 build.py all
 ```
 
-このコマンドは、次の 4 つを順に行います。
+このコマンドは、次の 5 つを順に行います。
 
 1. ONLYOFFICE の文書エディターのプログラム(sdkjs、約 320MB)を GitHub から取ってきます。
 2. 公式の Linux 版 ONLYOFFICE Desktop Editors 9.4.0(約 345MB)を GitHub から取ってきて、展開します。
 3. sdkjs にパッチを当てて、文書エディターを組み立てます。
 4. 展開した Linux 版の文書エディターを、組み立てた物に入れ替えます。
+5. メニューに「ja-office-fixes」を足します(`~/.local/share/applications/ja-office-fixes.desktop`)。
 
 取ってきた物は `work/` に残るので、2 回目からは取り直しません。
 
 ### 3. 起動する
+
+メニューの「ja-office-fixes」から起動します。
+
+コマンドで起動するときは、次のようにします。
 
 ```bash
 python3 build.py run
@@ -99,9 +105,15 @@ python3 build.py restore
 ```
 
 もう一度パッチを当てた物にするときは、`python3 build.py install` を使います。
-どちらの場合も、起動は `python3 build.py run` です。
+どちらの場合も、メニューの「ja-office-fixes」から起動できます。
 
-使わなくなったときは、このリポジトリのフォルダーを消します。
+このリポジトリのフォルダーを別の場所に移したときは、`python3 build.py menu` でメニューを作り直します。
+
+使わなくなったときは、次のコマンドでメニューから外してから、このリポジトリのフォルダーを消します。
+
+```bash
+python3 build.py unmenu
+```
 
 ### 対象の版
 

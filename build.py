@@ -6,7 +6,9 @@
     python3 build.py install   # put the build into the unpacked package
     python3 build.py restore   # put the original word editor back
     python3 build.py run [FILE...]
-    python3 build.py all       # fetch, build and install
+    python3 build.py menu      # add the patched app to the desktop menu
+    python3 build.py unmenu    # take it out of the menu
+    python3 build.py all       # fetch, build, install and menu
 
 Everything goes into work/ next to this file:
 
@@ -15,6 +17,9 @@ Everything goes into work/ next to this file:
 * work/desktop: the official Linux package (onlyoffice-desktopeditors-x64.tar.xz,
   about 345 MB) unpacked; the original word editor is kept in
   work/desktop/orig-sdkjs-word
+
+The menu entry is ja-office-fixes.desktop in ~/.local/share/applications
+(or $XDG_DATA_HOME/applications). It is the only file written outside work/.
 
 Only the word editor (documents) is changed. The spreadsheet and
 presentation editors are the official ones.
@@ -55,6 +60,7 @@ WORD = APP / "editors/sdkjs/word"
 ORIG = PKG / "orig-sdkjs-word"
 PATCHES = ROOT / "patches/sdkjs"
 BRANCH = "ja-office-fixes"
+MENU = pathlib.Path(os.environ.get("XDG_DATA_HOME") or pathlib.Path.home() / ".local/share") / "applications/ja-office-fixes.desktop"
 
 
 def run(*cmd: str, cwd: pathlib.Path | None = None) -> None:
@@ -124,10 +130,51 @@ def start(files: list[str]) -> None:
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def exec_arg(arg: str) -> str:
+    """One argument of a desktop entry's Exec key, quoted and escaped
+
+    The Desktop Entry Specification quotes the argument first, then escapes
+    backslashes once more as for any string value; a literal % is %%.
+    """
+    quoted = '"' + "".join("\\" + c if c in '"`$\\' else c for c in arg) + '"'
+    return quoted.replace("\\", "\\\\").replace("%", "%%")
+
+
+def menu() -> None:
+    # The app needs its own folder as the working folder (Path) and
+    # LD_LIBRARY_PATH, as start() gives it. The icon is a generic one from
+    # the desktop theme: the ONLYOFFICE logo is a trademark of Ascensio
+    # System SIA and is not used for a modified build.
+    entry = "\n".join([
+        "[Desktop Entry]",
+        "Type=Application",
+        "Name=ja-office-fixes",
+        "GenericName=Office suite",
+        "GenericName[ja]=オフィス",
+        "Comment=ONLYOFFICE Desktop Editors with the Japanese line-breaking and vertical-writing patches",
+        "Comment[ja]=日本語の行の折り返しと縦書きのパッチを当てた ONLYOFFICE Desktop Editors",
+        f"Path={APP}",
+        f"Exec=env {exec_arg(f'LD_LIBRARY_PATH={APP}')} QT_QPA_PLATFORM=xcb {exec_arg(str(APP / 'DesktopEditors'))} %F",
+        "Icon=x-office-document",
+        "Terminal=false",
+        "Categories=Office;WordProcessor;",
+        "StartupWMClass=DesktopEditors",
+        "",
+    ])
+    MENU.parent.mkdir(parents=True, exist_ok=True)
+    MENU.write_text(entry)
+    print("added to the menu:", MENU)
+
+
+def unmenu() -> None:
+    MENU.unlink(missing_ok=True)
+    print("removed from the menu:", MENU)
+
+
 def main() -> int:
     cmd, rest = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
     steps = {"fetch": [fetch], "build": [build], "install": [install], "restore": [restore],
-             "all": [fetch, build, install]}
+             "menu": [menu], "unmenu": [unmenu], "all": [fetch, build, install, menu]}
     if cmd in steps:
         for step in steps[cmd]:
             step()
