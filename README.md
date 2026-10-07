@@ -102,6 +102,18 @@ python3 build.py run 文書.docx
 起動した後は、普通の ONLYOFFICE と同じに使えます。
 直してあるのは文書(docx など)だけです。表計算とプレゼンテーションは公式のままです。
 
+### パッチを新しくする
+
+このリポジトリのパッチが新しくなったときは、次の 2 つのコマンドを使います。
+
+```bash
+git pull
+python3 build.py all
+```
+
+`build.py` は、パッチが変わったことを見つけて、公式の sdkjs にパッチを当て直します。
+パッチが変わっていなければ、当て直しません。
+
 ### 元に戻す
 
 パッチを当てる前の、公式の文書エディターに戻すときは、次のコマンドを使います。
@@ -191,6 +203,7 @@ the app they had; their editors are the official ones.
 - Start it from the menu, by double-clicking a document, or with `python3 build.py run [FILE]`.
 - `python3 build.py restore` puts the official document editor back; `python3 build.py install`
   puts the patched one in again.
+- After `git pull`, `python3 build.py all` applies the patches again when they changed.
 - `python3 build.py menu` makes the menu entry again, for example after moving the folder.
 - To stop using it, run `python3 build.py unmenu`, which removes the menu entry and gives the
   documents back to the system's default app, then delete the folder.

@@ -2,7 +2,8 @@
 """Fetch, patch, build and start ONLYOFFICE Desktop Editors with the Japanese patches.
 
     python3 build.py fetch     # get ONLYOFFICE sdkjs and the Linux desktop package
-    python3 build.py build     # apply patches/sdkjs/*.patch to the tag and build the word editor
+    python3 build.py build     # apply patches/sdkjs/*.patch to the tag and build the word editor;
+                               # when the patches or the tag changed, apply them again
     python3 build.py install   # put the build into the unpacked package
     python3 build.py restore   # put the original word editor back
     python3 build.py run [FILE...]
@@ -42,6 +43,7 @@ presentation editors are the official ones.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import pathlib
 import shutil
@@ -65,6 +67,8 @@ WORD = APP / "editors/sdkjs/word"
 ORIG = PKG / "orig-sdkjs-word"
 PATCHES = ROOT / "patches/sdkjs"
 BRANCH = "ja-office-fixes"
+# The patches_id() of the patches on BRANCH, kept inside the clone's .git
+STAMP = SDKJS / ".git/ja-office-fixes-patches"
 # The types a double-click opens in the patched app: the ones the word
 # editor handles, as the package's own entry names them
 DOCUMENTS = [
@@ -101,11 +105,33 @@ def fetch() -> None:
     print("fetched", SDKJS, "and", APP)
 
 
+def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(SDKJS), *args], capture_output=True, text=True, check=check)
+
+
+def patches_id() -> str:
+    """What the branch is made of: the tag and every patch, name and content"""
+    h = hashlib.sha256(SDKJS_TAG.encode())
+    for patch in sorted(PATCHES.glob("*.patch")):
+        h.update(patch.name.encode() + b"\0" + patch.read_bytes())
+    return h.hexdigest()
+
+
 def build() -> None:
-    branches = subprocess.run(["git", "-C", str(SDKJS), "branch", "--list", BRANCH], capture_output=True, text=True, check=True).stdout
-    if not branches.strip():
-        # The branch starts from the official tag, whatever is checked out now
-        run("git", "-C", str(SDKJS), "switch", "-q", "-c", BRANCH, SDKJS_TAG)
+    want = patches_id()
+    have = STAMP.read_text().strip() if STAMP.exists() else ""
+    if git("branch", "--list", BRANCH).stdout.strip() and have == want:
+        git("switch", "-q", BRANCH)
+    else:
+        if git("status", "--porcelain").stdout.strip():
+            sys.exit(f"{SDKJS} has changes of its own; commit or drop them, then build again")
+        if have:
+            print("the patches or the tag changed: applying them again")
+        if git("rev-parse", "-q", "--verify", f"refs/tags/{SDKJS_TAG}", check=False).returncode:
+            run("git", "-C", str(SDKJS), "fetch", "--depth", "1", "origin", "tag", SDKJS_TAG)
+        # The branch starts again from the official tag, whatever is checked out now
+        run("git", "-C", str(SDKJS), "switch", "-q", "-C", BRANCH, SDKJS_TAG)
+        STAMP.unlink(missing_ok=True)
         patches = sorted(str(p) for p in PATCHES.glob("*.patch"))
         # git am needs an identity for the commits it makes in the local clone
         try:
@@ -113,12 +139,11 @@ def build() -> None:
                 "am", "-q", "--3way", *patches)
         except subprocess.CalledProcessError:
             # Leave the clone as it was, so the next run starts again from the tag
-            subprocess.run(["git", "-C", str(SDKJS), "am", "--abort"])
-            run("git", "-C", str(SDKJS), "switch", "-q", "--detach", SDKJS_TAG)
-            run("git", "-C", str(SDKJS), "branch", "-D", BRANCH)
+            git("am", "--abort", check=False)
+            git("switch", "-q", "--detach", SDKJS_TAG)
+            git("branch", "-D", BRANCH)
             raise
-    else:
-        run("git", "-C", str(SDKJS), "switch", "-q", BRANCH)
+        STAMP.write_text(want + "\n")
     run(sys.executable, "build.py", "--product", "word", "--desktop", cwd=SDKJS / "build")
     print("built", SDKJS / "deploy/sdkjs/word")
 
