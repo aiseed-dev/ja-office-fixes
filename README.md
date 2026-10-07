@@ -40,11 +40,12 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 - ONLYOFFICE を先にインストールする必要はありません。
   `build.py` が公式の Linux 版を GitHub から取ってきて、`work/` の中に展開します。
 - パッチを当てた ONLYOFFICE は、メニューに「ja-office-fixes」という名前で入ります。
+- 文書(docx・doc・odt・rtf)をダブルクリックすると、パッチを当てた ONLYOFFICE で開きます。
 - すでに ONLYOFFICE をインストールしている場合は、アンインストールしてかまいません。
   残しておいても、パッチを当てた物とは別に動きます。
   `build.py` は、インストール済みの ONLYOFFICE を書き換えません。
-- インストール済みの ONLYOFFICE を残した場合、メニューの「ONLYOFFICE」や、ファイルのダブルクリックで
-  開くのは、そちらの直っていない ONLYOFFICE です。
+- インストール済みの ONLYOFFICE を残した場合、メニューの「ONLYOFFICE」から起動するのは、
+  そちらの直っていない ONLYOFFICE です。
 - パッチを当てた ONLYOFFICE は、自動では新しい版になりません。
 
 ### 要る物
@@ -74,12 +75,16 @@ python3 build.py all
 3. sdkjs にパッチを当てて、文書エディターを組み立てます。
 4. 展開した Linux 版の文書エディターを、組み立てた物に入れ替えます。
 5. メニューに「ja-office-fixes」を足します(`~/.local/share/applications/ja-office-fixes.desktop`)。
+   あわせて、文書(docx・doc・odt・rtf)をダブルクリックしたときに開くアプリを、
+   ja-office-fixes にします(`~/.config/mimeapps.list`)。
+   表計算とプレゼンテーションのファイルを開くアプリは変えません。
 
 取ってきた物は `work/` に残るので、2 回目からは取り直しません。
 
 ### 3. 起動する
 
 メニューの「ja-office-fixes」から起動します。
+文書のファイルをダブルクリックしても起動します。
 
 コマンドで起動するときは、次のようにします。
 
@@ -110,6 +115,7 @@ python3 build.py restore
 このリポジトリのフォルダーを別の場所に移したときは、`python3 build.py menu` でメニューを作り直します。
 
 使わなくなったときは、次のコマンドでメニューから外してから、このリポジトリのフォルダーを消します。
+このコマンドは、文書をダブルクリックしたときに開くアプリも、前の設定に戻します。
 
 ```bash
 python3 build.py unmenu
