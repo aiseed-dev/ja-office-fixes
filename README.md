@@ -41,6 +41,8 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 - `e` は元号の年、`ee` は 2 桁の元号の年です。`r` は `ee`、`rr` は `gggee` と同じです。
 - 表示形式に `[$-411]` が無いときは、ブックの言語が日本語の場合に和暦にします。
 - 表示形式の「G/標準」を、「標準」として扱います。
+- 日本の Excel が「元年」の表示に使う `[$-ja-JP-x-gannen]` では、元号の最初の年を「元」と表示します(令和元年5月1日)。
+  Excel と同じく、元号を漢字で書く(`gg` か `ggg`)ときだけで、`ge.m.d` は「R1.5.1」のままです。
 
 ![和暦の直す前と直した後](docs/images/wareki.png)
 
@@ -274,7 +276,6 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 
 - ページ全体の縦書き(縦書きの節)。docx から読む変換器(core)の段階で設定が消えるので、sdkjs だけでは直せません。
 - 縦書きの「、」「。」は位置を寄せただけで、書体の縦書き用の字形は使っていません。
-- 元年の表示。`[$-ja-JP-x-gannen]` の表示形式も、元号の最初の年は「1年」と表示します。
 - ルビ、傍点、ふりがなの保存など。
 - 漢数字の `[DBNum4]`。Excel でも表示が変わらなかったので、そのままです。
 
@@ -304,7 +305,8 @@ line breaking, vertical writing, dates in the Japanese era, Japanese text functi
   full-width forms stand upright; brackets, dashes and Latin text stay turned with the line.
 - Spreadsheet dates in the Japanese era: `[$-411]ggge"年"m"月"d"日"` shows 令和8年10月6日 and
   `[$-411]ge.m.d` shows R8.10.6, following ECMA-376 Part 1, 18.8.31 (g, gg, ggg, e, ee, r, rr).
-  `G/標準` is read as General.
+  `G/標準` is read as General. With `[$-ja-JP-x-gannen]` the first year of an era is 元 where the era is
+  written in kanji (令和元年5月1日), as in Excel.
 - ASC and JIS convert full-width and half-width ASCII, spaces and katakana (ASC("エクセル") = ｴｸｾﾙ,
   JIS("ｴｸｾﾙ") = エクセル). LENB, LEFTB, RIGHTB, MIDB, REPLACEB, FINDB and SEARCHB count the bytes of
   code page 932 (LENB("あいう") = 6). VALUE reads full-width digits.

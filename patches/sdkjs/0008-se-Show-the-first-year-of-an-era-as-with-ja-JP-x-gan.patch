@@ -1,0 +1,102 @@
+From 89c1863d3145fe67c730bc7cc022b6fe0317090e Mon Sep 17 00:00:00 2001
+From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
+Date: Thu, 8 Oct 2026 21:15:25 +0900
+Subject: [PATCH] =?UTF-8?q?[se]=20Show=20the=20first=20year=20of=20an=20er?=
+ =?UTF-8?q?a=20as=20=E5=85=83=20with=20[$-ja-JP-x-gannen]?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Excel writes [$-ja-JP-x-gannen] for dates in the Japanese era that say
+元年 for the first year of an era. The tag was read as ja-jp, so the era
+was shown, but the first year came out as 1 (令和1年5月1日).
+
+Excel for Mac 16.113 writes 元 for e, ee and r when the year is 1 and the
+format names the era in kanji (gg or ggg, and rr): 令和元年5月1日, 令和 元年,
+令元年. With the initial only (ge.m.d gives R1.5.1), with no era (e gives
+1, ee gives 01) or with [DBNum1] (令和一年) it stays a number. These
+follow it.
+
+Assisted-by: ClaudeCode:claude-opus-5-5
+---
+ common/NumFormat.js                              | 15 ++++++++++++++-
+ .../spreadsheet-calculation/NumFormatParse.js    | 16 ++++++++++++++++
+ 2 files changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/common/NumFormat.js b/common/NumFormat.js
+index e08c59f..1113adf 100644
+--- a/common/NumFormat.js
++++ b/common/NumFormat.js
+@@ -797,6 +797,9 @@ function NumFormat(bAddMinusIfNes)
+ 	this.LCID = null;
+ 	this.CurrencyString = null;
+ 	this.DBNum = 0;
++	// [$-ja-JP-x-gannen]: the first year of an era is 元 where the era is
++	// written in kanji
++	this.bGannen = false;
+ 
+ 	this.bGeneralChart = false;//if the format contains only one text (e.g. "General" in chart)
+     this.bAddMinusIfNes = bAddMinusIfNes;//when formatting for negative numbers is not specified, sometimes a minus sign needs to be inserted
+@@ -2164,6 +2167,8 @@ NumFormat.prototype =
+ 								// bracket keeps only "ja" of it
+ 								if (/^ja$/i.test(item.Lid))
+ 									this.LCID = 0x411;
++								if (/-x-gannen/i.test(item.val))
++									this.bGannen = true;
+ 							}
+ 						}
+                     }
+@@ -2291,6 +2296,12 @@ NumFormat.prototype =
+         var dbField = function (v) {
+             return jaDBNum ? dBNumJaField(v.toString(), jaDBNum, this.DBNum) : v;
+         }.bind(this);
++        // With [$-ja-JP-x-gannen], Excel writes the first year of an era as 元
++        // when the format names the era in kanji (gg or ggg, and rr); with the
++        // initial only (g), with no era, or with DBNum it stays a number
++        var gannen = isJapanese && this.bGannen && !jaDBNum && this.aRawFormat.some(function (it) {
++            return numFormat_Era === it.type && it.val >= 2;
++        });
+         if(null == nValType)
+             nValType = CellValueType.Number;
+         var res = [];
+@@ -2519,7 +2530,9 @@ NumFormat.prototype =
+                     else
+                     {
+                         checkRLM();
+-                        if (era)
++                        if (era && gannen && 1 === era.year)
++                            oCurText.text += '\u5143';
++                        else if (era)
+                             oCurText.text += dbField(item.val > 1 ? this._ZeroPad(era.year) : era.year);
+                         else if (item.val > 1)
+                             // Outside ja-jp, ee is yy and e is yyyy
+diff --git a/tests/cell/spreadsheet-calculation/NumFormatParse.js b/tests/cell/spreadsheet-calculation/NumFormatParse.js
+index d54ab42..5082a81 100644
+--- a/tests/cell/spreadsheet-calculation/NumFormatParse.js
++++ b/tests/cell/spreadsheet-calculation/NumFormatParse.js
+@@ -678,6 +678,22 @@ $(function () {
+             [46301, 'e/m/d', en, '2026/10/6'],
+             [46301, 'ee/mm/dd', en, '26/10/06'],
+             [46301, '[$-411]aaaa', en, '火曜日'],
++            // [$-ja-JP-x-gannen]: 元 for the first year where the era is in
++            // kanji, as Excel for Mac 16.113 shows it
++            [43586, '[$-ja-JP-x-gannen]ggge"年"m"月"d"日";@', ja, '令和元年5月1日'],
++            [43586, '[$-ja-JP-x-gannen,80]ggge"年"', ja, '令和元年'],
++            [43586, '[$-ja-JP-x-gannen]ggg ee"年"', ja, '令和 元年'],
++            [43586, '[$-ja-JP-x-gannen]rr"年"', ja, '令和元年'],
++            [43586, '[$-ja-JP-x-gannen]gge"年"', ja, '令元年'],
++            [43586, '[$-ja-JP-x-gannen]g ggg e', ja, 'R 令和 元'],
++            [32516, '[$-ja-JP-x-gannen]ggge"年"m"月"d"日"', ja, '平成元年1月8日'],
++            [9856, '[$-ja-JP-x-gannen]ggge"年"', ja, '昭和元年'],
++            [43831, '[$-ja-JP-x-gannen]ggge"年"', ja, '令和2年'],
++            [43586, '[$-ja-JP-x-gannen]ge.m.d', ja, 'R1.5.1'],
++            [43586, '[$-ja-JP-x-gannen]e"年"', ja, '1年'],
++            [43586, '[$-ja-JP-x-gannen]ee', ja, '01'],
++            [43586, '[$-ja-JP-x-gannen]r', ja, '01'],
++            [43586, '[DBNum1][$-ja-JP-x-gannen]ggge"年"m"月"d"日"', ja, '令和一年五月一日'],
+             // E+ and E- stay scientific, and G/標準 is General
+             [46301, '0.00E+00', ja, '4.63E+04'],
+             [46301, '0.0e-0', ja, '4.6e4'],
+-- 
+2.50.1 (Apple Git-155)
+
