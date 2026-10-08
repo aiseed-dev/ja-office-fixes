@@ -1,0 +1,415 @@
+From 2166b2ab938750f3ba976c5c560e0f6256b795ab Mon Sep 17 00:00:00 2001
+From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
+Date: Thu, 8 Oct 2026 14:45:25 +0900
+Subject: [PATCH] [se] Show numbers and dates in DBNum1 to DBNum3 as Excel does
+ in ja-jp
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[DBNum1] to [DBNum3] write a number in Japanese numerals. ECMA-376 does
+not define them for SpreadsheetML (the DBNUM switches of 17.16.4.3 are
+Word's), so they follow what Excel for Mac 16.113 shows in the ja-jp
+locale. Only DBNum1 was done, only when the format named a locale with
+[$-411], and always digit by digit, so [DBNum1]General showed 1234 as
+一二三四 where Excel shows 千二百三十四, and DBNum2 and DBNum3 did nothing.
+
+In ja-jp (the format's [$-411], or the workbook's locale):
+- With General, the number is written by place value: 千二百三十四,
+  一万二千三百四十五, 一億, 一兆. DBNum2 writes daiji with a one before 拾,
+  百 and 阡 (壱阡弐百参拾四, 壱萬), and DBNum3 full-width digits with the
+  place characters (千２百３十４). Fifteen significant digits are shown,
+  the decimals digit by digit (千二百三十四.五), and the digits above 兆
+  one by one (一〇〇〇〇兆).
+- With other number formats, each digit is replaced (一,二三四), and the
+  rounding and separators are those of the format. A section without
+  DBNum is not changed, as in Excel ([DBNum1]0;"△"0 shows △1234).
+- In dates and times, yyyy and a field that starts with a zero are
+  written digit by digit (二〇二六, 〇五) and the other fields by place
+  value (令和八年十月八日, 二十三時); DBNum3 makes the digits full-width.
+
+Outside ja-jp nothing changes.
+
+Assisted-by: ClaudeCode:claude-opus-5-5
+---
+ common/NumFormat.js                           | 151 +++++++++++++++---
+ .../spreadsheet-calculation/NumFormatParse.js | 111 +++++++++++++
+ 2 files changed, 243 insertions(+), 19 deletions(-)
+
+diff --git a/common/NumFormat.js b/common/NumFormat.js
+index b561419..e08c59f 100644
+--- a/common/NumFormat.js
++++ b/common/NumFormat.js
+@@ -108,6 +108,105 @@ var gc_oParseDateOverrideFormats = {
+     "[h]:mm:ss": 1
+ };
+ const dBNum1Numbers = ['\u3007','\u4E00','\u4E8C','\u4E09','\u56DB','\u4E94','\u516D','\u4E03','\u516B','\u4E5D'];
++// The Japanese numerals of [DBNum1] to [DBNum3], as Excel shows them in the
++// ja-jp locale. DBNum1 writes kanji, DBNum2 the forms written on documents
++// (daiji), and DBNum3 full-width digits with the place characters of DBNum1.
++// In DBNum2 a one is written before 拾, 百 and 阡 too (壱拾); in the others it
++// is left out (十, 百五). A group of four digits is followed by 万, 億 or 兆,
++// and the digits above 兆 are written one by one.
++const dBNumJa = {
++	1: {digits: dBNum1Numbers, places: ['', '十', '百', '千'], groups: ['', '万', '億', '兆'], one: false},
++	2: {digits: ['〇', '壱', '弐', '参', '四', '伍', '六', '七', '八', '九'],
++		places: ['', '拾', '百', '阡'], groups: ['', '萬', '億', '兆'], one: true},
++	3: {digits: ['０', '１', '２', '３', '４', '５', '６', '７', '８', '９'],
++		places: ['', '十', '百', '千'], groups: ['', '万', '億', '兆'], one: false}
++};
++
++// Each digit of s replaced by its numeral, one by one
++function dBNumJaDigits(s, table) {
++	let res = '';
++	for (let i = 0; i < s.length; ++i) {
++		let c = s.charCodeAt(i) - 48;
++		res += 0 <= c && c <= 9 ? table.digits[c] : s[i];
++	}
++	return res;
++}
++
++// A number from 1 to 9999 by place value (千二百三十四)
++function dBNumJaGroup(n, table) {
++	let res = '';
++	for (let place = 3; place >= 0; --place) {
++		let d = Math.floor(n / Math.pow(10, place)) % 10;
++		if (0 === d) {
++			continue;
++		}
++		if (place > 0 && 1 === d && !table.one) {
++			res += table.places[place];
++		} else {
++			res += table.digits[d] + table.places[place];
++		}
++	}
++	return res;
++}
++
++// A whole number, given as its digits, by place value
++function dBNumJaInteger(s, table) {
++	s = s.replace(/^0+/, '');
++	if (!s) {
++		return table.digits[0];
++	}
++	let res = '';
++	if (s.length > 16) {
++		res = dBNumJaDigits(s.slice(0, s.length - 12), table) + table.groups[3];
++		s = s.slice(s.length - 12);
++	}
++	let groups = Math.ceil(s.length / 4);
++	for (let g = groups - 1; g >= 0; --g) {
++		let end = s.length - g * 4;
++		let n = parseInt(s.slice(Math.max(0, end - 4), end), 10);
++		if (n) {
++			res += dBNumJaGroup(n, table) + table.groups[g];
++		}
++	}
++	return res;
++}
++
++// A number as General shows it with [DBNum1] to [DBNum3]: fifteen
++// significant digits, the whole part by place value and the decimals one
++// by one, never in the scientific form
++function dBNumJaGeneral(number, table, decimalSeparator) {
++	let parts = Math.abs(number).toExponential(14).split('e');
++	let digits = parts[0].replace('.', '');
++	let point = parseInt(parts[1], 10) + 1;
++	let whole, frac;
++	if (point <= 0) {
++		whole = '0';
++		frac = '0'.repeat(-point) + digits;
++	} else if (point >= digits.length) {
++		whole = digits + '0'.repeat(point - digits.length);
++		frac = '';
++	} else {
++		whole = digits.slice(0, point);
++		frac = digits.slice(point);
++	}
++	frac = frac.replace(/0+$/, '');
++	let res = dBNumJaInteger(whole, table);
++	if (frac) {
++		res += decimalSeparator + dBNumJaDigits(frac, table);
++	}
++	return res;
++}
++
++// A field of a date or time with [DBNum1] to [DBNum3]. In DBNum3 the digits
++// are only made full-width. Otherwise a year of four digits, and a field
++// that starts with a zero (05, 00), is written digit by digit, and any
++// other field by place value (十, 二十三)
++function dBNumJaField(s, table, dbNum) {
++	if (3 === dbNum || s.length > 2 || '0' === s[0]) {
++		return dBNumJaDigits(s, table);
++	}
++	return dBNumJaGroup(parseInt(s, 10), table);
++}
+ const interfaceFormatScientific = '0.00E+00';
+ const interfaceFormatPercent = '0.00%';
+ let interfaceShortDateFormat = 'm/d/yyyy';
+@@ -1930,7 +2029,11 @@ NumFormat.prototype =
+         }
+         return aRes;
+     },
+-	_replaceDBNumDigit: function (val) {
++	_replaceDBNumDigit: function (val, jaTable) {
++		// In ja-jp, DBNum1 to DBNum3 replace each digit that is left
++		if (jaTable) {
++			return dBNumJaDigits(val, jaTable);
++		}
+ 		//todo DBNum 1-4
+ 		if (1 !== this.DBNum) {
+ 			return val;
+@@ -2183,6 +2286,11 @@ NumFormat.prototype =
+         // The era codes follow the ja-jp locale: the format's [$-411], or the
+         // workbook's when the format names none
+         var isJapanese = 0x411 === (null != this.LCID ? this.LCID : cultureInfo.LCID);
++        // [DBNum1] to [DBNum3] in ja-jp, as Excel shows them
++        var jaDBNum = isJapanese ? dBNumJa[this.DBNum] : null;
++        var dbField = function (v) {
++            return jaDBNum ? dBNumJaField(v.toString(), jaDBNum, this.DBNum) : v;
++        }.bind(this);
+         if(null == nValType)
+             nValType = CellValueType.Number;
+         var res = [];
+@@ -2412,12 +2520,12 @@ NumFormat.prototype =
+                     {
+                         checkRLM();
+                         if (era)
+-                            oCurText.text += item.val > 1 ? this._ZeroPad(era.year) : era.year;
++                            oCurText.text += dbField(item.val > 1 ? this._ZeroPad(era.year) : era.year);
+                         else if (item.val > 1)
+                             // Outside ja-jp, ee is yy and e is yyyy
+-                            oCurText.text += date.year.toString().slice(-2);
++                            oCurText.text += dbField(date.year.toString().slice(-2));
+                         else
+-                            oCurText.text += date.year;
++                            oCurText.text += dbField(date.year);
+                     }
+                 }
+                 else if(numFormat_Year == item.type)
+@@ -2425,12 +2533,12 @@ NumFormat.prototype =
+                   if (item.val > 0) {
+ 					  checkRLM();
+                     if (item.val <= 2) {
+-						oCurText.text += (oParsedNumber.date.year.toString().slice(-2));
++						oCurText.text += dbField(oParsedNumber.date.year.toString().slice(-2));
+                     } else {
+ 						if (oParsedNumber.date.year.toString().length < 4)
+-                    		oCurText.text += '0' + oParsedNumber.date.year;
++                    		oCurText.text += dbField('0' + oParsedNumber.date.year);
+ 						else
+-							oCurText.text += oParsedNumber.date.year;
++							oCurText.text += dbField(oParsedNumber.date.year);
+                     }
+                   }
+                 }
+@@ -2439,10 +2547,10 @@ NumFormat.prototype =
+                     var m = oParsedNumber.date.month;
+ 					if (item.val === 1) {
+ 						checkRLM();
+-						oCurText.text += m + 1;
++						oCurText.text += dbField(m + 1);
+ 					} else if (item.val === 2) {
+ 						checkRLM();
+-						oCurText.text += this._ZeroPad(m + 1);
++						oCurText.text += dbField(this._ZeroPad(m + 1));
+ 					}
+                     else if (item.val == 3) {
+                         if (this.bDay && cultureInfoLCID.AbbreviatedMonthGenitiveNames.length > 0)
+@@ -2466,10 +2574,10 @@ NumFormat.prototype =
+                 {
+                     if(item.val == 1) {
+ 						checkRLM();
+-						oCurText.text += oParsedNumber.date.d;
++						oCurText.text += dbField(oParsedNumber.date.d);
+ 					} else if(item.val === 2) {
+ 						checkRLM();
+-						oCurText.text += this._ZeroPad(oParsedNumber.date.d);
++						oCurText.text += dbField(this._ZeroPad(oParsedNumber.date.d));
+ 					}
+                     else if(item.val == 3)
+                         oCurText.text += cultureInfoLCID.AbbreviatedDayNames[oParsedNumber.date.dayWeek];
+@@ -2488,9 +2596,9 @@ NumFormat.prototype =
+ 					if (item.val > 0) {
+ 						checkRLM(i - 1);
+ 						if (item.val === 1)
+-							oCurText.text += h;
++							oCurText.text += dbField(h);
+ 						else
+-							oCurText.text += this._ZeroPad(h);
++							oCurText.text += dbField(this._ZeroPad(h));
+ 					}
+                 }
+                 else if(numFormat_Minute == item.type)
+@@ -2501,9 +2609,9 @@ NumFormat.prototype =
+ 					if (item.val > 0) {
+ 						checkRLM(i - 1);
+ 						if (item.val === 1)
+-							oCurText.text += min;
++							oCurText.text += dbField(min);
+ 						else
+-							oCurText.text += this._ZeroPad(min);
++							oCurText.text += dbField(this._ZeroPad(min));
+ 					}
+                 }
+                 else if(numFormat_Second == item.type)
+@@ -2517,9 +2625,9 @@ NumFormat.prototype =
+ 					if (item.val > 0) {
+ 						checkRLM(i - 1);
+ 						if (item.val === 1)
+-							oCurText.text += s;
++							oCurText.text += dbField(s);
+ 						else
+-							oCurText.text += this._ZeroPad(s);
++							oCurText.text += dbField(this._ZeroPad(s));
+ 					}
+                 }
+                 else if (numFormat_AmPm == item.type) {
+@@ -2552,7 +2660,12 @@ NumFormat.prototype =
+                 else if (numFormat_General == item.type) {
+                     this._CommitText(res, oCurText, null, null);
+                     //todo minus sign
+-                    res = res.concat(this._applyGeneralFormat(Math.abs(number), nValType, dDigitsCount, bChart, cultureInfo));
++                    if (jaDBNum && CellValueType.Number === nValType) {
++                        // By place value, as Excel's General does with DBNum
++                        res.push({text: dBNumJaGeneral(number, jaDBNum, cultureInfo.NumberDecimalSeparator)});
++                    } else {
++                        res = res.concat(this._applyGeneralFormat(Math.abs(number), nValType, dDigitsCount, bChart, cultureInfo));
++                    }
+                 } else if (numFormat_Plus == item.type) {
+ 					hasSign = true;
+ 					if (number > 0) {
+@@ -2591,7 +2704,7 @@ NumFormat.prototype =
+ 		for(var i = 0; i < res.length; ++i){
+ 			var elem = res[i];
+ 			if (elem.text) {
+-				elem.text = this._replaceDBNumDigit(elem.text);
++				elem.text = this._replaceDBNumDigit(elem.text, jaDBNum);
+ 				nLen += elem.text.length;
+ 			}
+ 		}
+diff --git a/tests/cell/spreadsheet-calculation/NumFormatParse.js b/tests/cell/spreadsheet-calculation/NumFormatParse.js
+index 8277b03..d54ab42 100644
+--- a/tests/cell/spreadsheet-calculation/NumFormatParse.js
++++ b/tests/cell/spreadsheet-calculation/NumFormatParse.js
+@@ -691,6 +691,117 @@ $(function () {
+         }
+     });
+ 
++    QUnit.test('Japanese numerals of DBNum1 to DBNum3', function (assert) {
++        // ECMA-376 does not define [DBNum1] to [DBNum3] for SpreadsheetML;
++        // these are what Excel for Mac 16.113 shows in the ja-jp locale
++        const ja = AscCommon.g_aCultureInfos[1041];
++        const en = AscCommon.g_aCultureInfos[1033];
++        let testCases = [
++            // General: by place value; a one before 十, 百 and 千 is left out
++            [0, '[DBNum1]General', ja, '〇'],
++            [1, '[DBNum1]General', ja, '一'],
++            [10, '[DBNum1]General', ja, '十'],
++            [12, '[DBNum1]General', ja, '十二'],
++            [89, '[DBNum1]General', ja, '八十九'],
++            [101, '[DBNum1]General', ja, '百一'],
++            [110, '[DBNum1]General', ja, '百十'],
++            [1001, '[DBNum1]General', ja, '千一'],
++            [1100, '[DBNum1]General', ja, '千百'],
++            [1234, '[DBNum1]General', ja, '千二百三十四'],
++            [10000, '[DBNum1]General', ja, '一万'],
++            [10010, '[DBNum1]General', ja, '一万十'],
++            [11000, '[DBNum1]General', ja, '一万千'],
++            [100000, '[DBNum1]General', ja, '十万'],
++            [11000000, '[DBNum1]General', ja, '千百万'],
++            [100010000, '[DBNum1]General', ja, '一億一万'],
++            [1100000000, '[DBNum1]General', ja, '十一億'],
++            [1e12, '[DBNum1]General', ja, '一兆'],
++            [1234567890123, '[DBNum1]General', ja, '一兆二千三百四十五億六千七百八十九万百二十三'],
++            // Above 兆 the digits are written one by one, to fifteen digits
++            [1e16, '[DBNum1]General', ja, '一〇〇〇〇兆'],
++            // Excel keeps fifteen digits of 123456789012345678 when it is entered
++            [123456789012345000, '[DBNum1]General', ja, '一二三四五六兆七千八百九十億千二百三十四万五千'],
++            [1e20, '[DBNum1]General', ja, '一〇〇〇〇〇〇〇〇兆'],
++            // Decimals digit by digit, and the sign
++            [1234.5678, '[DBNum1]General', ja, '千二百三十四.五六七八'],
++            [0.001, '[DBNum1]General', ja, '〇.〇〇一'],
++            [-1234, '[DBNum1]General', ja, '-千二百三十四'],
++            [-0.5, '[DBNum1]General', ja, '-〇.五'],
++            [46027.211863425924, '[DBNum1]General', ja, '四万六千二十七.二一一八六三四二五九'],
++            [1234, '[DBNum1][$-411]General', en, '千二百三十四'],
++            // DBNum2: daiji, with a one before 拾, 百 and 阡
++            [10, '[DBNum2]General', ja, '壱拾'],
++            [89, '[DBNum2]General', ja, '八拾九'],
++            [110, '[DBNum2]General', ja, '壱百壱拾'],
++            [1234, '[DBNum2]General', ja, '壱阡弐百参拾四'],
++            [12345, '[DBNum2]General', ja, '壱萬弐阡参百四拾伍'],
++            [100000, '[DBNum2]General', ja, '壱拾萬'],
++            [1100000000, '[DBNum2]General', ja, '壱拾壱億'],
++            [1234567890123, '[DBNum2]General', ja, '壱兆弐阡参百四拾伍億六阡七百八拾九萬壱百弐拾参'],
++            [1e16, '[DBNum2]General', ja, '壱〇〇〇〇兆'],
++            [0.001, '[DBNum2]General', ja, '〇.〇〇壱'],
++            // DBNum3: full-width digits with the place characters
++            [0, '[DBNum3]General', ja, '０'],
++            [12, '[DBNum3]General', ja, '十２'],
++            [20, '[DBNum3]General', ja, '２十'],
++            [101, '[DBNum3]General', ja, '百１'],
++            [1234, '[DBNum3]General', ja, '千２百３十４'],
++            [10010, '[DBNum3]General', ja, '１万十'],
++            [1100000000, '[DBNum3]General', ja, '十１億'],
++            [1e16, '[DBNum3]General', ja, '１００００兆'],
++            [-0.5, '[DBNum3]General', ja, '-０.５'],
++            // Other number formats: each digit, rounded and separated as the format says
++            [1234, '[DBNum1]0', ja, '一二三四'],
++            [1234.567, '[DBNum1]0', ja, '一二三五'],
++            [10010, '[DBNum1]0', ja, '一〇〇一〇'],
++            [1234.567, '[DBNum1]0.00', ja, '一二三四.五七'],
++            [1234, '[DBNum1]#,##0', ja, '一,二三四'],
++            [1234.5, '[DBNum1]#,##0', ja, '一,二三五'],
++            [1234, '[DBNum2]0', ja, '壱弐参四'],
++            [89, '[DBNum2]0', ja, '八九'],
++            [1234, '[DBNum2]#,##0.00', ja, '壱,弐参四.〇〇'],
++            [1234.567, '[DBNum3]#,##0"円"', ja, '１,２３５円'],
++            [1234, '[DBNum1]"金"#,##0"円"', ja, '金一,二三四円'],
++            // A section without DBNum is not changed
++            [-1234, '[DBNum1]#,##0;-#,##0', ja, '-1,234'],
++            [-1234, '[DBNum1]0;"△"0', ja, '△1234'],
++            // Dates: yyyy and a field that starts with a zero digit by digit,
++            // the other fields by place value; DBNum3 full-width digits only
++            [46303.54513888889, '[DBNum1][$-411]ggge"年"m"月"d"日"', ja, '令和八年十月八日'],
++            [46303.54513888889, '[DBNum1]yyyy"年"m"月"d"日"', ja, '二〇二六年十月八日'],
++            [46303.54513888889, '[DBNum2][$-411]ggge"年"m"月"d"日"', ja, '令和八年壱拾月八日'],
++            [46303.54513888889, '[DBNum3][$-411]ggge"年"m"月"d"日"', ja, '令和８年１０月８日'],
++            [46303.54513888889, '[DBNum1][$-411]ge.m.d', ja, 'R八.十.八'],
++            [46303.54513888889, '[DBNum1]h"時"mm"分"', ja, '十三時〇五分'],
++            [43586, '[DBNum2][$-411]ggge"年"m"月"d"日"', ja, '令和壱年伍月壱日'],
++            [44196.375, '[DBNum1][$-411]ggge"年"m"月"d"日"', ja, '令和二年十二月三十一日'],
++            [36535.854166666664, '[DBNum2][$-411]ggge"年"m"月"d"日"', ja, '平成壱拾弐年壱月壱拾日'],
++            [36535.854166666664, '[DBNum1]h"時"mm"分"', ja, '二十時三十分'],
++            [46027.211863425924, '[DBNum1]dd', ja, '〇五'],
++            [46027.211863425924, '[DBNum1]mm', ja, '〇一'],
++            [46027.211863425924, '[DBNum1]yy', ja, '二十六'],
++            [46027.211863425924, '[DBNum1][$-411]ee', ja, '〇八'],
++            [46027.211863425924, '[DBNum1]h:mm:ss', ja, '五:〇五:〇五'],
++            [46027.211863425924, '[DBNum2]hh:mm', ja, '〇伍:〇伍'],
++            [46027.211863425924, '[DBNum3]h:mm', ja, '５:０５'],
++            [46386.9796875, '[DBNum1]h:mm:ss', ja, '二十三:三十:四十五'],
++            [46386.9796875, '[DBNum2]hh:mm', ja, '弐拾参:参拾'],
++            [40210, '[DBNum1]h:mm:ss', ja, '〇:〇〇:〇〇'],
++            [40210, '[DBNum1]yy', ja, '十'],
++            [38645.423726851855, '[DBNum1]yy', ja, '〇五'],
++            [38645.423726851855, '[DBNum1][$-411]ee', ja, '十七'],
++            // Outside ja-jp nothing changes
++            [1234, '[DBNum1]General', en, '1234'],
++            [1234, '[DBNum2]0', en, '1234'],
++        ];
++        for (let i = 0; i < testCases.length; i++) {
++            let [value, format, culture, expected] = testCases[i];
++            let formatted = new AscCommon.CellFormat(format).format(value, undefined, undefined, undefined, culture);
++            let text = formatted.map(function (part) { return part.text; }).join('');
++            assert.strictEqual(text, expected, `format("${format}", ${value})`);
++        }
++    });
++
+     QUnit.test('date/time elapsed formats', function (assert) {
+         let testCases = [
+             // Date format cases
+-- 
+2.50.1 (Apple Git-155)
+

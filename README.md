@@ -1,6 +1,6 @@
 # ja-office-fixes
 
-ONLYOFFICE と Euro-Office の文書エディターと表計算で、日本語の行の折り返し・縦書き・和暦・関数を直すパッチです。
+ONLYOFFICE と Euro-Office の文書エディターと表計算で、日本語の行の折り返し・縦書き・和暦・関数・漢数字を直すパッチです。
 今は ONLYOFFICE Desktop Editors 9.4.0 に当てて使います。
 ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは関係のない、独自の取り組みです。
 
@@ -60,6 +60,29 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 - LENB・LEFTB・RIGHTB・MIDB・REPLACEB・FINDB・SEARCHB は、日本語の文字コード(シフト JIS)のバイトで数えます。
   英数字と半角の片仮名は 1 バイト、ほかの字は 2 バイトです。2 バイトの字の途中で切れるときは、その半分をスペースにします。
 - VALUE は、全角の数字と記号も読みます。
+
+### 漢数字(表計算)
+
+表示形式の `[DBNum1]`・`[DBNum2]`・`[DBNum3]` で、数と日付を漢数字で表示します。
+ECMA-376 には定めが無いので、日本語の環境の Excel(Mac の Excel 16.113)の表示に合わせました。
+今の ONLYOFFICE は、`[$-411]` の付いた `[DBNum1]` だけを 1 字ずつ替え、`[DBNum2]` と `[DBNum3]` は算用数字のままです。
+
+| 表示形式 | 1234 | 12345 | 2026 年 10 月 8 日 |
+|---|---|---|---|
+| `[DBNum1]General` | 千二百三十四 | 一万二千三百四十五 | — |
+| `[DBNum2]General` | 壱阡弐百参拾四 | 壱萬弐阡参百四拾伍 | — |
+| `[DBNum3]General` | 千２百３十４ | １万２千３百４十５ | — |
+| `[DBNum1]#,##0` | 一,二三四 | 一二,三四五 | — |
+| `[DBNum1][$-411]ggge"年"m"月"d"日"` | — | — | 令和八年十月八日 |
+| `[DBNum1]yyyy"年"m"月"d"日"` | — | — | 二〇二六年十月八日 |
+
+- 「標準」(General)と組むと、位取りで書きます。`[DBNum1]` と `[DBNum3]` は、十・百・千の前の「一」を書きません(百五、千)。
+  `[DBNum2]` は大字で、「壱拾」のように書きます。小数は 1 字ずつ書きます。
+- ほかの数の表示形式と組むと、数字を 1 字ずつ替えます。桁区切りと四捨五入は、表示形式のとおりです。
+  `[DBNum1]0;"△"0` のように、`[DBNum1]` の無い区分の数は替えません。
+- 日付と時刻は、`yyyy` と、0 で始まる欄(05 など)を 1 字ずつ、ほかの欄を位取りで書きます(十月、二十三時)。
+  `[DBNum3]` は数字を全角にするだけです(令和８年１０月８日)。
+- 表示形式に `[$-411]` が無いときは、ブックの言語が日本語の場合に替えます。
 
 ## 使い方(Linux)
 
@@ -237,7 +260,8 @@ docx をダブルクリックして開くようにするときは、Finder で d
 - sdkjs にもともとある組版の試験(段落・表・ハイフネーション・文字の組み立て・図の配置)を、node で回せるようにしました。
   パッチを当てても、すべて通ります。足した日本語の試験は、パッチの前は落ち、後は通ります。
 
-- 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦と日本語の関数の試験を足しました。
+- 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦、日本語の関数、漢数字の試験を足しました。
+  漢数字の試験の答えは、Mac の Excel に印刷させて確かめた値です。
   文字列の関数の試験のうち「TEXT」の 1 件は、パッチを当てる前から node では落ちます。
 
 ```bash
@@ -251,7 +275,8 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 - ページ全体の縦書き(縦書きの節)。docx から読む変換器(core)の段階で設定が消えるので、sdkjs だけでは直せません。
 - 縦書きの「、」「。」は位置を寄せただけで、書体の縦書き用の字形は使っていません。
 - 元年の表示。`[$-ja-JP-x-gannen]` の表示形式も、元号の最初の年は「1年」と表示します。
-- ルビ、傍点、漢数字、ふりがなの保存など。
+- ルビ、傍点、ふりがなの保存など。
+- 漢数字の `[DBNum4]`。Excel でも表示が変わらなかったので、そのままです。
 
 ## ライセンスと表示
 
@@ -269,7 +294,7 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 ## English
 
 Patches for the document and spreadsheet editors of ONLYOFFICE Desktop Editors that fix Japanese
-line breaking, vertical writing, dates in the Japanese era and Japanese text functions. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
+line breaking, vertical writing, dates in the Japanese era, Japanese text functions and Japanese numerals. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
 
 - Lines break between kana (they used to move to the next line as one word).
 - A character that may not begin a line (。、」 …) hangs one character past the line end, as in Word,
@@ -283,6 +308,10 @@ line breaking, vertical writing, dates in the Japanese era and Japanese text fun
 - ASC and JIS convert full-width and half-width ASCII, spaces and katakana (ASC("エクセル") = ｴｸｾﾙ,
   JIS("ｴｸｾﾙ") = エクセル). LENB, LEFTB, RIGHTB, MIDB, REPLACEB, FINDB and SEARCHB count the bytes of
   code page 932 (LENB("あいう") = 6). VALUE reads full-width digits.
+- `[DBNum1]`, `[DBNum2]` and `[DBNum3]` show numbers and dates in Japanese numerals as Excel does in the
+  Japanese locale (ECMA-376 does not define them): with General by place value (1234 = 千二百三十四,
+  壱阡弐百参拾四 or 千２百３十４), with other number formats digit by digit (一,二三四), and in dates
+  (令和八年十月八日). Before, only `[DBNum1]` with `[$-411]` worked, digit by digit.
 
 ### Use (Linux)
 
