@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fetch, patch, build and start ONLYOFFICE Desktop Editors with the Japanese patches.
 
-    python3 build.py fetch     # get ONLYOFFICE sdkjs and the Linux desktop package
+    python3 build.py fetch     # get ONLYOFFICE sdkjs and the desktop package (Linux or Mac)
     python3 build.py build     # apply patches/sdkjs/*.patch to the tag and build the editors;
                                # when the patches or the tag changed, apply them again
     python3 build.py install   # put the build into the unpacked package
@@ -15,9 +15,20 @@ Everything goes into work/ next to this file:
 
 * work/sdkjs: ONLYOFFICE sdkjs at the tag of the desktop release, cloned
   with --depth 1 (about 320 MB)
-* work/desktop: the official Linux package (onlyoffice-desktopeditors-x64.tar.xz,
-  about 345 MB) unpacked; the original editors are kept in
+* work/desktop: on Linux, the official package (onlyoffice-desktopeditors-x64.tar.xz,
+  about 345 MB) unpacked. The original editors are kept in
   work/desktop/orig-sdkjs-word and work/desktop/orig-sdkjs-cell
+
+On a Mac, the app is copied out of the official disk image
+(ONLYOFFICE-arm.dmg or ONLYOFFICE-x86_64.dmg, about 550 MB; kept in work/)
+into ~/Applications/Office.app, where the Finder and Spotlight find apps
+(the app asks to be moved to an Applications folder when it starts from
+anywhere else). It is named Office: the ONLYOFFICE name is not the name of
+a modified build. An Office.app there that is not ONLYOFFICE is never
+touched. Changing the app breaks its signature, so it is signed again for
+this machine (an ad-hoc signature), and the quarantine mark of the download
+is taken off. Which app opens a docx on a double-click is chosen in the
+Finder ("Get Info", "Open with"); menu says how.
 
 The menu entry is ja-office-fixes.desktop in ~/.local/share/applications
 (or $XDG_DATA_HOME/applications). It lists the file types of the package's
@@ -46,6 +57,7 @@ from __future__ import annotations
 import hashlib
 import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import sys
@@ -56,13 +68,25 @@ import urllib.request
 # editors/sdkjs/word/sdk-all-min.js says "Version: 9.4.0 (build:129)")
 VERSION = "9.4.0"
 SDKJS_TAG = "v9.4.0.129"
-PACKAGE_URL = f"https://github.com/ONLYOFFICE/DesktopEditors/releases/download/v{VERSION}/onlyoffice-desktopeditors-x64.tar.xz"
+MAC = sys.platform == "darwin"
+RELEASE = f"https://github.com/ONLYOFFICE/DesktopEditors/releases/download/v{VERSION}"
+if MAC:
+    PACKAGE_URL = f"{RELEASE}/ONLYOFFICE-{'arm' if platform.machine() == 'arm64' else 'x86_64'}.dmg"
+else:
+    PACKAGE_URL = f"{RELEASE}/onlyoffice-desktopeditors-x64.tar.xz"
 
 ROOT = pathlib.Path(__file__).resolve().parent
 WORK = ROOT / "work"
 SDKJS = WORK / "sdkjs"
 PKG = WORK / "desktop"
-APP = PKG / "opt/onlyoffice/desktopeditors"
+# The name of the patched app on a Mac
+APP_NAME = "Office"
+if MAC:
+    APP = pathlib.Path.home() / "Applications" / f"{APP_NAME}.app"
+    EDITORS = APP / "Contents/Resources/editors/sdkjs"
+else:
+    APP = PKG / "opt/onlyoffice/desktopeditors"
+    EDITORS = APP / "editors/sdkjs"
 # The editors the patches change
 PRODUCTS = ("word", "cell")
 PATCHES = ROOT / "patches/sdkjs"
@@ -84,6 +108,8 @@ DOCUMENTS = [
     "application/rtf",
 ]
 MENU = pathlib.Path(os.environ.get("XDG_DATA_HOME") or pathlib.Path.home() / ".local/share") / "applications/ja-office-fixes.desktop"
+# The bundle identifier of the official Mac app, kept by the copy
+MAC_BUNDLE_ID = "asc.onlyoffice.ONLYOFFICE"
 
 
 def run(*cmd: str, cwd: pathlib.Path | None = None) -> None:
@@ -94,15 +120,63 @@ def fetch() -> None:
     WORK.mkdir(exist_ok=True)
     if not SDKJS.exists():
         run("git", "clone", "--depth", "1", "--branch", SDKJS_TAG, "https://github.com/ONLYOFFICE/sdkjs", str(SDKJS))
+    if MAC:
+        ours_or_exit()
     if not APP.exists():
         archive = WORK / PACKAGE_URL.rsplit("/", 1)[1]
         if not archive.exists():
             print("downloading", PACKAGE_URL)
-            urllib.request.urlretrieve(PACKAGE_URL, archive)
+            part = archive.with_suffix(archive.suffix + ".part")
+            urllib.request.urlretrieve(PACKAGE_URL, part)
+            part.rename(archive)
         PKG.mkdir(exist_ok=True)
-        with tarfile.open(archive) as t:
-            t.extractall(PKG, filter="tar")
+        if MAC:
+            copy_app(archive)
+        else:
+            with tarfile.open(archive) as t:
+                t.extractall(PKG, filter="tar")
     print("fetched", SDKJS, "and", APP)
+
+
+def copy_app(dmg: pathlib.Path) -> None:
+    """Copy the app out of the disk image as Office.app, name it Office, and
+    sign it for this machine"""
+    mount = WORK / "mount"
+    mount.mkdir(exist_ok=True)
+    APP.parent.mkdir(exist_ok=True)
+    run("hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mount), str(dmg))
+    try:
+        apps = sorted(mount.glob("*.app"))
+        if len(apps) != 1:
+            sys.exit(f"expected one app in {dmg.name}, found {[a.name for a in apps]}")
+        run("ditto", str(apps[0]), str(APP))
+    finally:
+        run("hdiutil", "detach", "-quiet", str(mount))
+    # The name the Finder, the Dock and the menu bar show
+    plist = APP / "Contents/Info.plist"
+    for key in ("CFBundleName", "CFBundleDisplayName"):
+        run("plutil", "-replace", key, "-string", APP_NAME, str(plist))
+    sign()
+
+
+def ours_or_exit() -> None:
+    """Stop when ~/Applications/Office.app is some other app"""
+    plist = APP / "Contents/Info.plist"
+    if not APP.exists():
+        return
+    got = subprocess.run(["plutil", "-extract", "CFBundleIdentifier", "raw", str(plist)],
+                         capture_output=True, text=True).stdout.strip()
+    if got != MAC_BUNDLE_ID:
+        sys.exit(f"{APP} is another app ({got or 'no bundle identifier'}); move it away first")
+
+
+def sign() -> None:
+    """Sign the changed app again for this machine (ad hoc) and take off the
+    quarantine mark of the download, so macOS starts it"""
+    if not MAC:
+        return
+    run("xattr", "-dr", "com.apple.quarantine", str(APP))
+    run("codesign", "--force", "--deep", "--sign", "-", str(APP))
 
 
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -150,8 +224,10 @@ def build() -> None:
 
 
 def install() -> None:
+    if MAC:
+        ours_or_exit()
     for name in PRODUCTS:
-        editor = APP / "editors/sdkjs" / name
+        editor = EDITORS / name
         orig = PKG / f"orig-sdkjs-{name}"
         if not orig.exists():
             orig.mkdir(parents=True)
@@ -163,11 +239,14 @@ def install() -> None:
         for cache in ("sdk-all.bin", "sdk-all.cache"):
             (editor / cache).unlink(missing_ok=True)
         print("installed the patched editor into", editor)
+    sign()
 
 
 def restore() -> None:
+    if MAC:
+        ours_or_exit()
     for name in PRODUCTS:
-        editor = APP / "editors/sdkjs" / name
+        editor = EDITORS / name
         orig = PKG / f"orig-sdkjs-{name}"
         if not orig.exists():
             continue
@@ -175,11 +254,16 @@ def restore() -> None:
         for f in orig.iterdir():
             shutil.copy2(f, editor / f.name)
         print("restored the original editor into", editor)
+    sign()
 
 
 def start(files: list[str]) -> None:
-    env = dict(os.environ, LD_LIBRARY_PATH="./", QT_QPA_PLATFORM="xcb")
     paths = [str(pathlib.Path(f).resolve()) for f in files]
+    if MAC:
+        # By its path, so the official app, if there is one, is not started
+        run("open", "-a", str(APP), *paths)
+        return
+    env = dict(os.environ, LD_LIBRARY_PATH="./", QT_QPA_PLATFORM="xcb")
     subprocess.Popen(["./DesktopEditors", *paths], cwd=APP, env=env, start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -195,6 +279,9 @@ def exec_arg(arg: str) -> str:
 
 
 def menu() -> None:
+    if MAC:
+        mac_menu()
+        return
     # The app needs its own folder as the working folder (Path) and
     # LD_LIBRARY_PATH, as start() gives it. The icon is a generic one from
     # the desktop theme: the ONLYOFFICE logo is a trademark of Ascensio
@@ -243,7 +330,17 @@ def refresh_menu() -> None:
         subprocess.run(["update-desktop-database", str(MENU.parent)], capture_output=True)
 
 
+def mac_menu() -> None:
+    """The app is already in ~/Applications: say how to open documents with it"""
+    print(APP_NAME, "is in", APP.parent)
+    print("to open docx files with it on a double-click: select a docx in the Finder, File > Get Info,")
+    print(f"choose {APP_NAME} under \"Open with\", and press \"Change All...\"")
+
+
 def unmenu() -> None:
+    if MAC:
+        print(f"to remove {APP_NAME}, move {APP} to the Trash; work/ holds the rest")
+        return
     MENU.unlink(missing_ok=True)
     refresh_menu()
     # Take the entry out of the user's defaults; the types fall back to the

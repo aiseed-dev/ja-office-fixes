@@ -175,6 +175,62 @@ python3 build.py unmenu
 ONLYOFFICE Desktop Editors 9.4.0 です(sdkjs のタグ v9.4.0.129)。
 パッチは Euro-Office の sdkjs にもそのまま当たります。
 
+## 使い方(Mac)
+
+Mac でも、同じ `build.py` で組み立てます。公式の Mac 版を取ってきて、手元でパッチを当てます。
+
+### Mac での違い
+
+- パッチを当てたアプリは「Office」という名前で、`~/Applications/Office.app` に入ります。
+  ONLYOFFICE の名前は、手を入れた版の名前には使いません。
+  起動した後の画面には、元が ONLYOFFICE であることが出ます。
+- アプリの中身を変えると、公式の署名が合わなくなります。
+  そこで `build.py` は、この Mac だけで使う署名をし直し、ダウンロードの検疫の印を外します。
+  ほかの Mac に写して使うことはできません。
+- すでに ONLYOFFICE(`/Applications/ONLYOFFICE.app`)をインストールしていても、書き換えません。
+  ただし、設定と最近のファイルの一覧は、両方のアプリで共通です。
+- `~/Applications` に ONLYOFFICE でない「Office.app」があるときは、`build.py` は止まります。
+
+### 要る物
+
+- Mac(Apple シリコンか Intel)
+- git(Xcode のコマンドラインツールに入っています)
+- Python 3.12 以上(miniforge や Homebrew の物)
+- ディスクの空き 約 2.1GB
+
+### 組み立てる
+
+```bash
+git clone https://github.com/aiseed-dev/ja-office-fixes.git
+cd ja-office-fixes
+python3 build.py all
+```
+
+このコマンドは、次のことを順に行います。
+
+1. ONLYOFFICE のエディターのプログラム(sdkjs、約 320MB)を GitHub から取ってきます。
+2. 公式の Mac 版 ONLYOFFICE Desktop Editors 9.4.0 のディスクイメージ(Apple シリコンは
+   ONLYOFFICE-arm.dmg、Intel は ONLYOFFICE-x86_64.dmg、約 550MB)を GitHub から取ってきます。
+   アプリを `~/Applications/Office.app` に写し、名前を「Office」にします。
+3. sdkjs にパッチを当てて、文書エディターと表計算のエディターを組み立て、アプリに入れます。
+4. アプリに、この Mac で使う署名をし直します。
+
+### 起動する
+
+Finder の「アプリケーション」(ホームのフォルダーの中)か、Spotlight で「Office」を開きます。
+コマンドで起動するときは `python3 build.py run 文書.docx` とします。
+
+初めて起動すると、「アップデートを自動で確認しますか?」と聞かれます。
+「確認しない」を選んでください。自動で新しい版にすると、パッチの無い公式の版になります。
+
+docx をダブルクリックして開くようにするときは、Finder で docx を 1 つ選び、
+「ファイル」の「情報を見る」の「このアプリケーションで開く」で「Office」を選んで、「すべてを変更」を押します。
+
+### 元に戻す、やめる
+
+- `python3 build.py restore` で公式のエディターに戻り、`python3 build.py install` でパッチを当てた物に戻ります。
+- 使わなくなったときは、`~/Applications/Office.app` をゴミ箱に入れて、このリポジトリのフォルダーを消します。
+
 ## 確かめ方
 
 - `tests/documents/` の docx と xlsx を、直す前と直した後の ONLYOFFICE で印刷して比べました(上の画像)。
@@ -257,6 +313,32 @@ the app they had; the presentation editor is the official one.
 - To stop using it, run `python3 build.py unmenu`, which removes the menu entry and gives the
   documents back to the system's default app, then delete the folder.
 - The patched app is not updated automatically.
+
+### Use (Mac)
+
+The same `build.py` works on a Mac (Apple silicon or Intel). You need git, Python 3.12 or later
+(from miniforge or Homebrew, for example) and about 2.1 GB of free disk space.
+
+```bash
+git clone https://github.com/aiseed-dev/ja-office-fixes.git
+cd ja-office-fixes
+python3 build.py all
+```
+
+`python3 build.py all` fetches sdkjs and the official Mac disk image 9.4.0 (ONLYOFFICE-arm.dmg or
+ONLYOFFICE-x86_64.dmg, about 550 MB) into `work/`, copies the app into `~/Applications/Office.app`
+under the name "Office", and puts the patched document and spreadsheet editors into it.
+
+- Changing the app breaks its signature, so it is signed again for this Mac only, and the quarantine mark of
+  the download is taken off. The app cannot be copied to another Mac.
+- An installed `/Applications/ONLYOFFICE.app` is not changed, but the two apps share their settings and recent files.
+  `build.py` stops if `~/Applications/Office.app` is another app.
+- On the first start, the app asks whether to check for updates automatically. Choose not to:
+  an automatic update installs the official app, without the patches.
+- To open docx files with it on a double-click, select a docx in the Finder, choose File > Get Info,
+  pick "Office" under "Open with" and press "Change All...".
+- `python3 build.py restore` and `python3 build.py install` work as on Linux. To stop using it, move
+  `~/Applications/Office.app` to the Trash and delete the folder.
 
 The patches are AGPL-3.0, like the code they change. ONLYOFFICE is a trademark of Ascensio System SIA.
 The first patch is the change of ONLYOFFICE/sdkjs#4885 by Yuito Murase (zeptometer), with tests.
