@@ -1,0 +1,250 @@
+From e1ed2e4fea1f8dafa581bfa40fad40704b49233d Mon Sep 17 00:00:00 2001
+From: ja-office-fixes <ja-office-fixes@localhost>
+Date: Sun, 11 Oct 2026 06:29:04 +0900
+Subject: [PATCH] [de] Choose the Asian and Latin text fonts in the paragraph
+ dialog
+
+Word's font dialog has a font for Asian text (w:eastAsia) and one for
+Latin text (w:ascii, w:hAnsi). The Font tab of the paragraph advanced
+settings now has both, filled from the selection and empty when it has
+more than one font. Each changes only its own text. The font list is
+the toolbar's, which the toolbar controller now hands out with
+getFontStore().
+---
+ .../main/app/controller/DocumentHolderExt.js  |  1 +
+ .../main/app/controller/Toolbar.js            | 23 ++++++----
+ .../ParagraphSettingsAdvanced.template        | 12 +++++
+ .../main/app/view/ParagraphSettings.js        |  1 +
+ .../app/view/ParagraphSettingsAdvanced.js     | 44 +++++++++++++++++--
+ apps/documenteditor/main/locale/en.json       |  2 +
+ apps/documenteditor/main/locale/ja.json       |  2 +
+ 7 files changed, 74 insertions(+), 11 deletions(-)
+
+diff --git a/apps/documenteditor/main/app/controller/DocumentHolderExt.js b/apps/documenteditor/main/app/controller/DocumentHolderExt.js
+index beb1e836..41cd630f 100644
+--- a/apps/documenteditor/main/app/controller/DocumentHolderExt.js
++++ b/apps/documenteditor/main/app/controller/DocumentHolderExt.js
+@@ -2134,6 +2134,7 @@ define([], function () {
+                                 tableStylerRows     : 2,
+                                 tableStylerColumns  : 1,
+                                 paragraphProps      : elValue,
++                                fontStore           : me.getApplication().getController('Toolbar').getFontStore(),
+                                 borderProps         : me.borderAdvancedProps,
+                                 isChart             : (item.isChart===true),
+                                 isSmartArtInternal  : (item.isSmartArtInternal===true),
+diff --git a/apps/documenteditor/main/app/controller/Toolbar.js b/apps/documenteditor/main/app/controller/Toolbar.js
+index 308164da..21abacfc 100644
+--- a/apps/documenteditor/main/app/controller/Toolbar.js
++++ b/apps/documenteditor/main/app/controller/Toolbar.js
+@@ -2361,21 +2361,28 @@ define([
+             this._state.dropcap = v;
+         },
+ 
+-        onDropCapAdvancedClick: function(isFrame) {
+-            var win, props, text,
+-                me = this;
+-
+-            if (!isFrame && _.isUndefined(me.fontstore)) {
+-                me.fontstore = new Common.Collections.Fonts();
+-                var fonts = me.toolbar.cmbFontName.store.toJSON();
++        // The fonts of the toolbar's font list, for the dialogs that choose a font
++        getFontStore: function() {
++            if (_.isUndefined(this.fontstore)) {
++                this.fontstore = new Common.Collections.Fonts();
++                var fonts = this.toolbar.cmbFontName.store.toJSON();
+                 var arr = [];
+                 _.each(fonts, function(font, index){
+                     if (!font.cloneid) {
+                         arr.push(_.clone(font));
+                     }
+                 });
+-                me.fontstore.add(arr);
++                this.fontstore.add(arr);
+             }
++            return this.fontstore;
++        },
++
++        onDropCapAdvancedClick: function(isFrame) {
++            var win, props, text,
++                me = this;
++
++            if (!isFrame)
++                me.getFontStore();
+ 
+             if (me.api){
+                 var selectedElements = me.api.getSelectedElements(),
+diff --git a/apps/documenteditor/main/app/template/ParagraphSettingsAdvanced.template b/apps/documenteditor/main/app/template/ParagraphSettingsAdvanced.template
+index 4b8cd301..979b6321 100644
+--- a/apps/documenteditor/main/app/template/ParagraphSettingsAdvanced.template
++++ b/apps/documenteditor/main/app/template/ParagraphSettingsAdvanced.template
+@@ -123,6 +123,18 @@
+ </div>
+ <div id="id-adv-paragraph-font" class="settings-panel">
+     <div class="inner-content" style="width: 100%;">
++        <table cols="2" role="presentation">
++            <tr>
++                <td class="padding-large">
++                    <label class="input-label"><%= scope.textEastAsiaFont %></label>
++                    <div id="paragraphadv-cmb-font-eastasia"></div>
++                </td>
++                <td class="padding-large padding-left-10">
++                    <label class="input-label"><%= scope.textAsciiFont %></label>
++                    <div id="paragraphadv-cmb-font-ascii"></div>
++                </td>
++            </tr>
++        </table>
+         <div class="padding-very-small">
+             <label class="header"><%= scope.textEffects %></label>
+         </div>
+diff --git a/apps/documenteditor/main/app/view/ParagraphSettings.js b/apps/documenteditor/main/app/view/ParagraphSettings.js
+index 77d227e2..6d739597 100644
+--- a/apps/documenteditor/main/app/view/ParagraphSettings.js
++++ b/apps/documenteditor/main/app/view/ParagraphSettings.js
+@@ -643,6 +643,7 @@ define([
+                                     tableStylerRows: 2,
+                                     tableStylerColumns: 1,
+                                     paragraphProps: elValue,
++                                    fontStore: DE.getController('Toolbar').getFontStore(),
+                                     borderProps: me.borderAdvancedProps,
+                                     isChart: me.isChart,
+                                     isSmartArtInternal: me.isSmartArtInternal,
+diff --git a/apps/documenteditor/main/app/view/ParagraphSettingsAdvanced.js b/apps/documenteditor/main/app/view/ParagraphSettingsAdvanced.js
+index 6d8a90eb..d711fb66 100644
+--- a/apps/documenteditor/main/app/view/ParagraphSettingsAdvanced.js
++++ b/apps/documenteditor/main/app/view/ParagraphSettingsAdvanced.js
+@@ -49,7 +49,7 @@ define([
+     DE.Views.ParagraphSettingsAdvanced = Common.Views.AdvancedSettingsWindow.extend(_.extend({
+         options: {
+             contentWidth: 370,
+-            contentHeight: 340,
++            contentHeight: 410,
+             toggleGroup: 'paragraph-adv-settings-group',
+             storageName: 'de-para-settings-adv-category'
+         },
+@@ -90,6 +90,7 @@ define([
+             this.tableStylerColumns = this.options.tableStylerColumns;
+             this.borderProps = this.options.borderProps;
+             this.api = this.options.api;
++            this.fontStore = this.options.fontStore;
+             this._originalProps = new Asc.asc_CParagraphProperty(this.options.paragraphProps);
+             this.isChart = this.options.isChart;
+             this.isSmartArtInternal = this.options.isSmartArtInternal;
+@@ -567,6 +568,24 @@ define([
+             this.cmbLigatures.setValue(Asc.LigaturesType.None);
+             this.cmbLigatures.on('selected', _.bind(this.onLigaturesSelect, this));
+ 
++            // The East Asian and Latin fonts of the text, as in Word's font dialog
++            var createFontCombo = function(el, put) {
++                return new Common.UI.ComboBoxFonts({
++                    el          : $(el),
++                    cls         : 'input-group-nr',
++                    style       : 'width: 175px;',
++                    menuCls     : 'scrollable-menu',
++                    menuStyle   : 'min-width: 175px;max-height: 236px;',
++                    store       : new Common.Collections.Fonts(),
++                    recent      : 0,
++                    takeFocusOnClose: true
++                }).on('selected', function(combo, record) {
++                    me._changedProps && me._changedProps[put](record.name);
++                });
++            };
++            this.cmbFontEastAsia = createFontCombo('#paragraphadv-cmb-font-eastasia', 'put_FontEastAsia');
++            this.cmbFontAscii = createFontCombo('#paragraphadv-cmb-font-ascii', 'put_FontAscii');
++
+             // Tabs
+             this.numTab = new Common.UI.MetricSpinner({
+                 el: $('#paraadv-spin-tab'),
+@@ -767,7 +786,7 @@ define([
+                 this.numSpacingBefore, this.numSpacingAfter, this.cmbLineRule, this.numLineHeight, this.chAddInterval, this.rbDirLtr, this.rbDirRtl, // 0 tab
+                 this.chBreakBefore, this.chKeepLines, this.chOrphan, this.chKeepNext, this.chLineNumbers, // 1 tab
+                 this.cmbBorderSize, this.btnBorderColor]).concat(this._btnsBorderPosition).concat([this.btnBackColor,  // 2 tab
+-                this.chStrike, this.chSubscript, this.chDoubleStrike, this.chSmallCaps, this.chSuperscript, this.chAllCaps, this.numSpacing, this.numPosition, // 3 tab
++                this.cmbFontEastAsia, this.cmbFontAscii, this.chStrike, this.chSubscript, this.chDoubleStrike, this.chSmallCaps, this.chSuperscript, this.chAllCaps, this.numSpacing, this.numPosition, // 3 tab
+                 this.numDefaultTab, this.numTab, this.cmbAlign, this.cmbLeader, this.tabList, this.btnAddTab, this.btnRemoveTab, this.btnRemoveAll,// 4 tab
+                 this.spnMarginTop, this.spnMarginLeft, this.spnMarginBottom, this.spnMarginRight // 5 tab
+             ]).concat(this.getFooterButtons());
+@@ -789,7 +808,7 @@ define([
+                         me.cmbBorderSize.focus();
+                         break;
+                     case 3:
+-                        me.chStrike.focus();
++                        me.cmbFontEastAsia.focus();
+                         if (e && (e instanceof jQuery.Event))
+                             me.api.SetDrawImagePlaceParagraph('paragraphadv-font-img', me._originalProps || new Asc.asc_CParagraphProperty());
+                         break;
+@@ -1021,6 +1040,8 @@ define([
+                 this.cmbOutlinelevel.setValue((props.get_OutlineLvl() === undefined || props.get_OutlineLvl()===null) ? -1 : props.get_OutlineLvl());
+                 this.cmbOutlinelevel.setDisabled(!!props.get_OutlineLvlStyle());
+                 this.cmbLigatures.setValue((props.get_Ligatures() === undefined || props.get_Ligatures()===null) ? '' : props.get_Ligatures());
++                this.setFontName(this.cmbFontEastAsia, props.get_FontEastAsia());
++                this.setFontName(this.cmbFontAscii, props.get_FontAscii());
+ 
+                 this._noApply = false;
+ 
+@@ -1059,6 +1080,10 @@ define([
+             this.updateMetricUnit();
+             this.updateThemeColors();
+ 
++            if (this.fontStore) {
++                this.cmbFontEastAsia.fillFonts(this.fontStore);
++                this.cmbFontAscii.fillFonts(this.fontStore);
++            }
+             this._setDefaults(this._originalProps);
+             var colorstr = (typeof(this.paragraphShade) == 'object') ? this.paragraphShade.color : this.paragraphShade;
+             this.BordersImage.setTableColor(colorstr);
+@@ -1533,6 +1558,17 @@ define([
+             }
+         },
+ 
++        // Show a font name, which may be a font that is not installed; empty
++        // when the selection has more than one font
++        setFontName: function(combo, name) {
++            if (!name) {
++                combo.setRawValue('');
++                return;
++            }
++            var rec = combo.store.findWhere({name: name});
++            rec ? combo.setValue(rec.get('name')) : combo.setRawValue(name);
++        },
++
+         onLigaturesSelect: function(combo, record) {
+             if (this._changedProps) {
+                 this._changedProps.put_Ligatures(record.value);
+@@ -1621,6 +1657,8 @@ define([
+         strSuppressLineNumbers: 'Suppress line numbers',
+         textOpenType: 'OpenType Features',
+         textLigatures: 'Ligatures',
++        textEastAsiaFont: 'Asian text font',
++        textAsciiFont: 'Latin text font',
+         textStandard: 'Standard only',
+         textContext: 'Contextual',
+         textHistorical: 'Historical',
+diff --git a/apps/documenteditor/main/locale/en.json b/apps/documenteditor/main/locale/en.json
+index 4517908a..3cb07047 100644
+--- a/apps/documenteditor/main/locale/en.json
++++ b/apps/documenteditor/main/locale/en.json
+@@ -3649,6 +3649,8 @@
+   "DE.Views.ParagraphSettingsAdvanced.textLeft": "Left",
+   "DE.Views.ParagraphSettingsAdvanced.textLevel": "Level",
+   "DE.Views.ParagraphSettingsAdvanced.textLigatures": "Ligatures",
++  "DE.Views.ParagraphSettingsAdvanced.textEastAsiaFont": "Asian text font",
++  "DE.Views.ParagraphSettingsAdvanced.textAsciiFont": "Latin text font",
+   "DE.Views.ParagraphSettingsAdvanced.textNone": "None",
+   "DE.Views.ParagraphSettingsAdvanced.textNoneSpecial": "(none)",
+   "DE.Views.ParagraphSettingsAdvanced.textOpenType": "OpenType features",
+diff --git a/apps/documenteditor/main/locale/ja.json b/apps/documenteditor/main/locale/ja.json
+index 67ad5cbd..e071af71 100644
+--- a/apps/documenteditor/main/locale/ja.json
++++ b/apps/documenteditor/main/locale/ja.json
+@@ -3647,6 +3647,8 @@
+   "DE.Views.ParagraphSettingsAdvanced.textLeft": "左",
+   "DE.Views.ParagraphSettingsAdvanced.textLevel": "レベル",
+   "DE.Views.ParagraphSettingsAdvanced.textLigatures": "合字",
++  "DE.Views.ParagraphSettingsAdvanced.textEastAsiaFont": "日本語用のフォント",
++  "DE.Views.ParagraphSettingsAdvanced.textAsciiFont": "英数字用のフォント",
+   "DE.Views.ParagraphSettingsAdvanced.textNone": "なし",
+   "DE.Views.ParagraphSettingsAdvanced.textNoneSpecial": "（なし）",
+   "DE.Views.ParagraphSettingsAdvanced.textOpenType": "OpenTypeフォント特性",
+-- 
+2.50.1 (Apple Git-155)
+

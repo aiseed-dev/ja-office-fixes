@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Fetch, patch, build and start ONLYOFFICE Desktop Editors with the Japanese patches.
 
-    python3 build.py fetch     # get ONLYOFFICE sdkjs and the desktop package (Linux or Mac)
-    python3 build.py build     # apply patches/sdkjs/*.patch to the tag and build the editors;
-                               # when the patches or the tag changed, apply them again
+    python3 build.py fetch     # get ONLYOFFICE sdkjs, web-apps and the desktop package (Linux or Mac)
+    python3 build.py build     # apply patches/sdkjs/*.patch and patches/web-apps/*.patch to the
+                               # tag and build the editors; when the patches or the tag changed,
+                               # apply them again
     python3 build.py install   # put the build into the unpacked package
     python3 build.py restore   # put the original editors back
     python3 build.py run [FILE...]
@@ -15,6 +16,10 @@ Everything goes into work/ next to this file:
 
 * work/sdkjs: ONLYOFFICE sdkjs at the tag of the desktop release, cloned
   with --depth 1 (about 320 MB)
+* work/web-apps: ONLYOFFICE web-apps (the screens of the editors) at the same
+  tag, cloned with --depth 1 (about 1 GB), and the npm packages its build
+  needs (about 120 MB). The original screen of the document editor is kept
+  in work/desktop/orig-web-apps-documenteditor
 * work/desktop: on Linux, the official package (onlyoffice-desktopeditors-x64.tar.xz,
   about 345 MB) unpacked. The original editors are kept in
   work/desktop/orig-sdkjs-word and work/desktop/orig-sdkjs-cell
@@ -48,6 +53,15 @@ presentation editor is the official one.
 * sdk-all.bin next to sdk-all.js is a cache of the original script, and the
   app writes sdk-all.cache there when it runs. Both are removed whenever a
   script goes in, so a stale cache is never used.
+* The web-apps build of the repository leaves the document editor's app.js
+  as the loader of separate modules, while the release bundles them into
+  app.js (the app ships only common/main/lib/util of the common modules).
+  So app.js is bundled again with r.js, from ../apps/documenteditor/main/app.js
+  as in the release, and the modules in app.js and code.js are the same ones
+  as in the release. The build needs Node.js (node and npx on the PATH).
+* The web-apps build counts its builds in build/*.json; the files are put
+  back after it, so the clone has no changes of its own.
+* Some web-apps files end lines with CR LF, so git am keeps the CRs.
 * The app starts only from its own folder with LD_LIBRARY_PATH=./, as the
   ONLYOFFICE flatpak's launcher does. Without it, Qt cannot load its xcb
   plugin and the app stops at once.
@@ -78,6 +92,7 @@ else:
 ROOT = pathlib.Path(__file__).resolve().parent
 WORK = ROOT / "work"
 SDKJS = WORK / "sdkjs"
+WEBAPPS = WORK / "web-apps"
 PKG = WORK / "desktop"
 # The name of the patched app on a Mac
 APP_NAME = "Office"
@@ -90,9 +105,12 @@ else:
 # The editors the patches change
 PRODUCTS = ("word", "cell")
 PATCHES = ROOT / "patches/sdkjs"
+WEB_PATCHES = ROOT / "patches/web-apps"
+# The screen of the document editor, and the files of it the build changes
+WEB_EDITOR = EDITORS.parent / "web-apps/apps/documenteditor/main"
+WEB_DEPLOY = WEBAPPS / "deploy/web-apps/apps/documenteditor/main"
+WEB_FILES = ("app.js", "code.js")
 BRANCH = "ja-office-fixes"
-# The patches_id() of the patches on BRANCH, kept inside the clone's .git
-STAMP = SDKJS / ".git/ja-office-fixes-patches"
 # The types a double-click opens in the patched app: the ones the word
 # editor handles, as the package's own entry names them
 DOCUMENTS = [
@@ -118,8 +136,9 @@ def run(*cmd: str, cwd: pathlib.Path | None = None) -> None:
 
 def fetch() -> None:
     WORK.mkdir(exist_ok=True)
-    if not SDKJS.exists():
-        run("git", "clone", "--depth", "1", "--branch", SDKJS_TAG, "https://github.com/ONLYOFFICE/sdkjs", str(SDKJS))
+    for repo in (SDKJS, WEBAPPS):
+        if not repo.exists():
+            run("git", "clone", "--depth", "1", "--branch", SDKJS_TAG, f"https://github.com/ONLYOFFICE/{repo.name}", str(repo))
     if MAC:
         ours_or_exit()
     if not APP.exists():
@@ -135,7 +154,7 @@ def fetch() -> None:
         else:
             with tarfile.open(archive) as t:
                 t.extractall(PKG, filter="tar")
-    print("fetched", SDKJS, "and", APP)
+    print("fetched", SDKJS, WEBAPPS, "and", APP)
 
 
 def copy_app(dmg: pathlib.Path) -> None:
@@ -179,48 +198,86 @@ def sign() -> None:
     run("codesign", "--force", "--deep", "--sign", "-", str(APP))
 
 
-def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(SDKJS), *args], capture_output=True, text=True, check=check)
+def git(repo: pathlib.Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=check)
 
 
-def patches_id() -> str:
+def patches_id(patches: pathlib.Path) -> str:
     """What the branch is made of: the tag and every patch, name and content"""
     h = hashlib.sha256(SDKJS_TAG.encode())
-    for patch in sorted(PATCHES.glob("*.patch")):
+    for patch in sorted(patches.glob("*.patch")):
         h.update(patch.name.encode() + b"\0" + patch.read_bytes())
     return h.hexdigest()
 
 
+def apply_patches(repo: pathlib.Path, patches: pathlib.Path) -> None:
+    """Put the clone on BRANCH: the tag with the patches applied. The
+    patches_id() of the patches on BRANCH is kept inside the clone's .git"""
+    stamp = repo / ".git/ja-office-fixes-patches"
+    want = patches_id(patches)
+    have = stamp.read_text().strip() if stamp.exists() else ""
+    if git(repo, "branch", "--list", BRANCH).stdout.strip() and have == want:
+        git(repo, "switch", "-q", BRANCH)
+        return
+    if git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip():
+        sys.exit(f"{repo} has changes of its own; commit or drop them, then build again")
+    if have:
+        print(f"the patches or the tag of {repo.name} changed: applying them again")
+    if git(repo, "rev-parse", "-q", "--verify", f"refs/tags/{SDKJS_TAG}", check=False).returncode:
+        run("git", "-C", str(repo), "fetch", "--depth", "1", "origin", "tag", SDKJS_TAG)
+    # The branch starts again from the official tag, whatever is checked out now
+    run("git", "-C", str(repo), "switch", "-q", "-C", BRANCH, SDKJS_TAG)
+    stamp.unlink(missing_ok=True)
+    files = sorted(str(p) for p in patches.glob("*.patch"))
+    # git am needs an identity for the commits it makes in the local clone
+    try:
+        run("git", "-C", str(repo), "-c", "user.name=ja-office-fixes", "-c", "user.email=ja-office-fixes@localhost",
+            "am", "-q", "--3way", "--keep-cr", *files)
+    except subprocess.CalledProcessError:
+        # Leave the clone as it was, so the next run starts again from the tag
+        git(repo, "am", "--abort", check=False)
+        git(repo, "switch", "-q", "--detach", SDKJS_TAG)
+        git(repo, "branch", "-D", BRANCH)
+        raise
+    stamp.write_text(want + "\n")
+
+
+# Bundle the document editor's app.js as the release does (see the notes above)
+BUNDLE_APP = """
+const rjs = require('./node_modules/requirejs/bin/r.js');
+const options = Object.assign({}, require('./documenteditor.json').main.js.requirejs.options);
+delete options.dir;
+delete options.appDir;
+options.name = '../apps/documenteditor/main/app.js';
+options.out = '../deploy/web-apps/apps/documenteditor/main/app.js';
+options.optimize = 'none';
+rjs.optimize(options, () => {}, e => { console.error(String(e)); process.exit(1); });
+"""
+
+
+def build_web_apps() -> None:
+    if not shutil.which("npx"):
+        sys.exit("the web-apps build needs Node.js: put node and npx on the PATH")
+    apply_patches(WEBAPPS, WEB_PATCHES)
+    tools = WEBAPPS / "build"
+    if not (tools / "node_modules").exists():
+        # --omit=dev: the test packages download PhantomJS, which the build does not use
+        run("npm", "install", "--no-audit", "--no-fund", "--omit=dev", cwd=tools)
+    try:
+        run("npx", "grunt", "deploy-common-component", "--desktop=true", cwd=tools)
+        run("npx", "grunt", "init-build-documenteditor", "deploy-app-main", "--desktop=true", cwd=tools)
+        run("node", "-e", BUNDLE_APP, cwd=tools)
+    finally:
+        git(WEBAPPS, "checkout", "--", "build/common.json", "build/documenteditor.json")
+    print("built", WEB_DEPLOY)
+
+
 def build() -> None:
-    want = patches_id()
-    have = STAMP.read_text().strip() if STAMP.exists() else ""
-    if git("branch", "--list", BRANCH).stdout.strip() and have == want:
-        git("switch", "-q", BRANCH)
-    else:
-        if git("status", "--porcelain").stdout.strip():
-            sys.exit(f"{SDKJS} has changes of its own; commit or drop them, then build again")
-        if have:
-            print("the patches or the tag changed: applying them again")
-        if git("rev-parse", "-q", "--verify", f"refs/tags/{SDKJS_TAG}", check=False).returncode:
-            run("git", "-C", str(SDKJS), "fetch", "--depth", "1", "origin", "tag", SDKJS_TAG)
-        # The branch starts again from the official tag, whatever is checked out now
-        run("git", "-C", str(SDKJS), "switch", "-q", "-C", BRANCH, SDKJS_TAG)
-        STAMP.unlink(missing_ok=True)
-        patches = sorted(str(p) for p in PATCHES.glob("*.patch"))
-        # git am needs an identity for the commits it makes in the local clone
-        try:
-            run("git", "-C", str(SDKJS), "-c", "user.name=ja-office-fixes", "-c", "user.email=ja-office-fixes@localhost",
-                "am", "-q", "--3way", *patches)
-        except subprocess.CalledProcessError:
-            # Leave the clone as it was, so the next run starts again from the tag
-            git("am", "--abort", check=False)
-            git("switch", "-q", "--detach", SDKJS_TAG)
-            git("branch", "-D", BRANCH)
-            raise
-        STAMP.write_text(want + "\n")
+    apply_patches(SDKJS, PATCHES)
     products = [arg for name in PRODUCTS for arg in ("--product", name)]
     run(sys.executable, "build.py", *products, "--desktop", cwd=SDKJS / "build")
     print("built", ", ".join(str(SDKJS / "deploy/sdkjs" / name) for name in PRODUCTS))
+    build_web_apps()
 
 
 def install() -> None:
@@ -239,6 +296,16 @@ def install() -> None:
         for cache in ("sdk-all.bin", "sdk-all.cache"):
             (editor / cache).unlink(missing_ok=True)
         print("installed the patched editor into", editor)
+    orig = PKG / "orig-web-apps-documenteditor"
+    if not orig.exists():
+        orig.mkdir(parents=True)
+        for name in WEB_FILES:
+            shutil.copy2(WEB_EDITOR / name, orig / name)
+        shutil.copytree(WEB_EDITOR / "locale", orig / "locale")
+    for name in WEB_FILES:
+        shutil.copy2(WEB_DEPLOY / name, WEB_EDITOR / name)
+    shutil.copytree(WEB_DEPLOY / "locale", WEB_EDITOR / "locale", dirs_exist_ok=True)
+    print("installed the patched screen into", WEB_EDITOR)
     sign()
 
 
@@ -254,6 +321,12 @@ def restore() -> None:
         for f in orig.iterdir():
             shutil.copy2(f, editor / f.name)
         print("restored the original editor into", editor)
+    orig = PKG / "orig-web-apps-documenteditor"
+    if orig.exists():
+        for name in WEB_FILES:
+            shutil.copy2(orig / name, WEB_EDITOR / name)
+        shutil.copytree(orig / "locale", WEB_EDITOR / "locale", dirs_exist_ok=True)
+        print("restored the original screen into", WEB_EDITOR)
     sign()
 
 

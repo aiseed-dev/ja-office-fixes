@@ -3,9 +3,11 @@
 ## Based on ONLYOFFICE
 
 The patches in `patches/sdkjs/` modify ONLYOFFICE sdkjs
-(https://github.com/ONLYOFFICE/sdkjs), developed by Ascensio System SIA and
-licensed under the GNU Affero General Public License v3.0. A program built
-with them is a modified version of ONLYOFFICE.
+(https://github.com/ONLYOFFICE/sdkjs), and the patches in `patches/web-apps/`
+modify ONLYOFFICE web-apps (https://github.com/ONLYOFFICE/web-apps). Both are
+developed by Ascensio System SIA and licensed under the GNU Affero General
+Public License v3.0. A program built with them is a modified version of
+ONLYOFFICE.
 
 Modifications (2026-10-06):
 
@@ -32,6 +34,26 @@ Modifications (2026-10-08):
   REPLACEB, FINDB and SEARCHB, and full-width digits in VALUE.
 - `tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js`:
   tests for them; five ASC expectations that recorded the old output.
+- `common/NumFormat.js`: Japanese numerals in [DBNum1] to [DBNum3], and the
+  first year of an era as 元 with [$-ja-JP-x-gannen].
+
+Modifications (2026-10-10 and 2026-10-11):
+
+- `common/Drawings/Format/Format.js`, `common/Shapes/Serialize.js`,
+  `common/Shapes/SerializeWriter.js`, `word/Editor/Styles.js`: the script
+  fonts of the theme (a:font), used for East Asian text by its language.
+- `common/libfont/map.js`, `common/libfont/textmeasurer.js`,
+  `common/Drawings/TextDrawer.js`, `common/Drawings/Metafile.js`,
+  `word/Drawing/Graphics.js`, `word/Editor/Styles.js`: the Latin text of a
+  missing MS Gothic or MS Mincho in BIZ UDGothic or BIZ UDMincho.
+- `common/apiCommon.js`, `word/api.js`: the Latin and East Asian fonts in
+  the paragraph settings.
+- `tests/word/styles/themeFonts.js`, `tests/word/styles/latinFonts.js`:
+  tests for them.
+- web-apps `apps/documenteditor/main/app/view/ParagraphSettingsAdvanced.js`,
+  its template, `controller/Toolbar.js`, `controller/DocumentHolderExt.js`,
+  `view/ParagraphSettings.js` and the en and ja locales: the Asian and Latin
+  text fonts in the Font tab of the paragraph advanced settings.
 
 ## Trademarks
 

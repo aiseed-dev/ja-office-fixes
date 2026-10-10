@@ -97,6 +97,14 @@ Office のテーマは、東アジアの書体(`<a:ea>`)を空にして、日本
   この設定は変換器(core)から sdkjs に渡らないので、代わりに文字の言語(`w:lang` の `eastAsia`)で決めます。
   日本語の Word で作った文書では、どちらも `ja-JP` です。
 - 保存するときも、テーマの書体の一覧を残します。
+- 段落の詳細設定の「フォント」タブに、「日本語用のフォント」と「英数字用のフォント」の欄を足しました。
+  Word のフォントのダイアログと同じく、片方だけを変えられます(`w:eastAsia` と、`w:ascii`・`w:hAnsi`)。
+  選んだ範囲に書体が 2 つ以上あるときは、欄が空になります。
+- ＭＳ ゴシックとＭＳ 明朝が手元に無いときは、英数字を BIZ UDゴシックと BIZ UD明朝で表示します(入っているときだけ)。
+  ＭＳ ゴシック・ＭＳ 明朝の英数字はすべて全角の半分の幅で、BIZ UDゴシック・BIZ UD明朝も同じ幅です。
+  そのため、英数字の多い行も Word と同じ幅になります。
+  漢字とかなは、今までどおり ONLYOFFICE が選ぶ書体です(Mac では Arial Unicode MS。幅と字の形がＭＳ ゴシックに近い書体です)。
+  文書に書く書体の名前は、ＭＳ ゴシックのままです。
 
 ## 使い方(Linux)
 
@@ -121,7 +129,8 @@ Office のテーマは、東アジアの書体(`<a:ea>`)を空にして、日本
 - Linux(x86_64)
 - git
 - Python 3.12 以上
-- ディスクの空き 約 2.1GB
+- Node.js(`node` と `npx`。画面の組み立てに使います)
+- ディスクの空き 約 3.8GB
 - xdg-utils(ダブルクリックで開くアプリを設定するのに使います。無いときは、この設定だけを飛ばします)
 
 ### 1. このリポジトリを取ってくる
@@ -139,10 +148,11 @@ python3 build.py all
 
 このコマンドは、次の 5 つを順に行います。
 
-1. ONLYOFFICE のエディターのプログラム(sdkjs、約 320MB)を GitHub から取ってきます。
+1. ONLYOFFICE のエディターのプログラム(sdkjs、約 320MB)と画面のプログラム(web-apps、約 1GB)を GitHub から取ってきます。
 2. 公式の Linux 版 ONLYOFFICE Desktop Editors 9.4.0(約 345MB)を GitHub から取ってきて、展開します。
-3. sdkjs にパッチを当てて、文書エディターと表計算のエディターを組み立てます。
-4. 展開した Linux 版の文書エディターと表計算のエディターを、組み立てた物に入れ替えます。
+3. sdkjs と web-apps にパッチを当てて、文書エディターと表計算のエディターと、文書エディターの画面を組み立てます。
+   web-apps の組み立てでは、npm の部品(約 120MB)を取ってきます。
+4. 展開した Linux 版の文書エディターと表計算のエディターと、文書エディターの画面を、組み立てた物に入れ替えます。
 5. メニューに「ja-office-fixes」を足します(`~/.local/share/applications/ja-office-fixes.desktop`)。
    あわせて、文書(docx・doc・odt・rtf)をダブルクリックしたときに開くアプリを、
    ja-office-fixes にします(`~/.config/mimeapps.list`)。
@@ -233,7 +243,8 @@ Mac でも、同じ `build.py` で組み立てます。公式の Mac 版を取�
 - Mac(Apple シリコンか Intel)
 - git(Xcode のコマンドラインツールに入っています)
 - Python 3.12 以上(miniforge や Homebrew の物)
-- ディスクの空き 約 2.1GB
+- Node.js(`node` と `npx`。画面の組み立てに使います)
+- ディスクの空き 約 3.8GB
 
 ### 組み立てる
 
@@ -249,7 +260,8 @@ python3 build.py all
 2. 公式の Mac 版 ONLYOFFICE Desktop Editors 9.4.0 のディスクイメージ(Apple シリコンは
    ONLYOFFICE-arm.dmg、Intel は ONLYOFFICE-x86_64.dmg、約 550MB)を GitHub から取ってきます。
    アプリを `~/Applications/Office.app` に写し、名前を「Office」にします。
-3. sdkjs にパッチを当てて、文書エディターと表計算のエディターを組み立て、アプリに入れます。
+3. sdkjs と web-apps にパッチを当てて、文書エディターと表計算のエディターと、文書エディターの画面を組み立て、アプリに入れます。
+   web-apps(約 1GB)と、その組み立てに使う npm の部品(約 120MB)を取ってきます。
 4. アプリに、この Mac で使う署名をし直します。
 
 ### 起動する
@@ -277,7 +289,7 @@ docx をダブルクリックして開くようにするときは、Finder で d
 - 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦、日本語の関数、漢数字の試験を足しました。
   漢数字の試験の答えは、Mac の Excel に印刷させて確かめた値です。
   文字列の関数の試験のうち「TEXT」の 1 件は、パッチを当てる前から node では落ちます。
-- テーマの書体の試験を足しました(`tests/word/styles/themeFonts.js`)。
+- テーマの書体の試験と、英数字の書体の置き換えの試験を足しました(`tests/word/styles/themeFonts.js`、`latinFonts.js`)。
 
 ```bash
 node tests/sdkjs_node/qunit.js work/sdkjs/tests/word/document-calculation/paragraph/paragraph-lines.js
@@ -296,7 +308,7 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 ## ライセンスと表示
 
 - パッチとスクリプトは GNU Affero General Public License v3.0(AGPL-3.0)です([LICENSE](LICENSE))。
-  パッチは ONLYOFFICE の sdkjs(AGPL-3.0)に手を入れたものです。
+  パッチは ONLYOFFICE の sdkjs と web-apps(どちらも AGPL-3.0)に手を入れたものです。
 - ONLYOFFICE is a trademark of Ascensio System SIA. このリポジトリは ONLYOFFICE の公式の物ではありません。
 - 手を入れた実行ファイルは配りません。利用者が公式の版を取り、手元でパッチを当てます。
 - 1 つ目のパッチは、Yuito Murase さん(zeptometer)が ONLYOFFICE に出した
@@ -332,6 +344,11 @@ line breaking, vertical writing, dates in the Japanese era, Japanese text functi
   (`<a:font script="Jpan">`, 游明朝 in Office's themes), as Office themes leave `<a:ea>` empty.
   Word picks the script by `w:themeFontLang`, which does not reach sdkjs, so the East Asian language of
   the text (`w:lang eastAsia`) is used instead. The list is kept on save.
+- The Font tab of the paragraph advanced settings has an "Asian text font" and a "Latin text font", as
+  Word's font dialog does: each changes only its own text (`w:eastAsia`, or `w:ascii` and `w:hAnsi`).
+- When MS Gothic or MS Mincho is not installed, their Latin text is set in BIZ UDGothic or BIZ UDMincho
+  (when those are installed), which have the same half-width Latin letters, so lines break as in Word.
+  Kana and kanji keep the font ONLYOFFICE picks, and the name saved stays MS Gothic or MS Mincho.
 
 ### Use (Linux)
 
@@ -339,7 +356,8 @@ No modified binaries are distributed. `build.py` downloads the official ONLYOFFI
 patches on your machine. You do not need to install ONLYOFFICE first, and an installed ONLYOFFICE
 is not changed; you may uninstall it.
 
-You need Linux (x86_64), git, Python 3.12 or later and about 2.1 GB of free disk space.
+You need Linux (x86_64), git, Python 3.12 or later, Node.js (node and npx, to build the screen of the
+document editor) and about 3.8 GB of free disk space.
 
 ```bash
 git clone https://github.com/aiseed-dev/ja-office-fixes.git
@@ -366,7 +384,7 @@ the app they had; the presentation editor is the official one.
 ### Use (Mac)
 
 The same `build.py` works on a Mac (Apple silicon or Intel). You need git, Python 3.12 or later
-(from miniforge or Homebrew, for example) and about 2.1 GB of free disk space.
+(from miniforge or Homebrew, for example), Node.js (node and npx) and about 3.8 GB of free disk space.
 
 ```bash
 git clone https://github.com/aiseed-dev/ja-office-fixes.git

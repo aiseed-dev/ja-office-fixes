@@ -1,0 +1,105 @@
+From c7b4ab137eda45bd76f742f891f5eb1588740ac9 Mon Sep 17 00:00:00 2001
+From: ja-office-fixes <ja-office-fixes@localhost>
+Date: Sun, 11 Oct 2026 06:27:40 +0900
+Subject: [PATCH] [de] Carry the Latin and East Asian fonts in the paragraph
+ settings
+
+Word's font dialog sets the font of Latin text (w:ascii, w:hAnsi) and
+of East Asian text (w:eastAsia) apart. The paragraph settings now
+carry both (FontAscii, FontEastAsia): they are filled from the
+selection, empty when it has more than one font, and paraApply sets
+each without touching the other, so the dialog of the web-apps patch
+can show and change them.
+---
+ common/apiCommon.js | 21 +++++++++++++++++++++
+ word/api.js         | 14 ++++++++++++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/common/apiCommon.js b/common/apiCommon.js
+index f1f8dac..0dfd71b 100644
+--- a/common/apiCommon.js
++++ b/common/apiCommon.js
+@@ -3038,6 +3038,9 @@ function (window, undefined) {
+ 				oBullet.FirstTextPr = obj.FirstTextPr;
+ 			}
+ 			this.Ligatures = undefined !== obj.Ligatures ? obj.Ligatures : undefined;
++			// The fonts of the Latin (w:ascii, w:hAnsi) and East Asian (w:eastAsia) text
++			this.FontAscii    = undefined !== obj.FontAscii ? obj.FontAscii : undefined;
++			this.FontEastAsia = undefined !== obj.FontEastAsia ? obj.FontEastAsia : undefined;
+ 
+ 			this.CanDeleteBlockCC = undefined !== obj.CanDeleteBlockCC ? obj.CanDeleteBlockCC : true;
+ 			this.CanEditBlockCC = undefined !== obj.CanEditBlockCC ? obj.CanEditBlockCC : true;
+@@ -3074,6 +3077,8 @@ function (window, undefined) {
+ 			this.SuppressLineNumbers = false;
+ 			this.Bullet = undefined;
+ 			this.Ligatures = undefined;
++			this.FontAscii = undefined;
++			this.FontEastAsia = undefined;
+ 
+ 			this.CanDeleteBlockCC = true;
+ 			this.CanEditBlockCC = true;
+@@ -3325,6 +3330,18 @@ function (window, undefined) {
+ 	asc_CParagraphProperty.prototype.asc_putLigatures = function (v) {
+ 		this.Ligatures = v;
+ 	};
++	asc_CParagraphProperty.prototype.asc_getFontAscii = function () {
++		return this.FontAscii;
++	};
++	asc_CParagraphProperty.prototype.asc_putFontAscii = function (v) {
++		this.FontAscii = v;
++	};
++	asc_CParagraphProperty.prototype.asc_getFontEastAsia = function () {
++		return this.FontEastAsia;
++	};
++	asc_CParagraphProperty.prototype.asc_putFontEastAsia = function (v) {
++		this.FontEastAsia = v;
++	};
+ 
+ 	/** @constructor */
+ 	function asc_CTexture() {
+@@ -8777,6 +8794,10 @@ function (window, undefined) {
+ 	prot["can_EditInlineContentControl"] = prot["asc_canEditInlineContentControl"] = prot.asc_canEditInlineContentControl;
+ 	prot["get_Ligatures"] = prot["asc_getLigatures"] = prot.asc_getLigatures;
+ 	prot["put_Ligatures"] = prot["asc_putLigatures"] = prot.asc_putLigatures;
++	prot["get_FontAscii"] = prot["asc_getFontAscii"] = prot.asc_getFontAscii;
++	prot["put_FontAscii"] = prot["asc_putFontAscii"] = prot.asc_putFontAscii;
++	prot["get_FontEastAsia"] = prot["asc_getFontEastAsia"] = prot.asc_getFontEastAsia;
++	prot["put_FontEastAsia"] = prot["asc_putFontEastAsia"] = prot.asc_putFontEastAsia;
+ 
+ 	window["AscCommon"].asc_CTexture = asc_CTexture;
+ 	prot = asc_CTexture.prototype;
+diff --git a/word/api.js b/word/api.js
+index 4029f81..f0f5556 100644
+--- a/word/api.js
++++ b/word/api.js
+@@ -2195,6 +2195,9 @@ background-repeat: no-repeat;\
+ 		ParaPr.TextSpacing = TextPr.Spacing;
+ 		ParaPr.Position    = TextPr.Position;
+ 		ParaPr.Ligatures   = TextPr.Ligatures;
++		// Undefined when the selection has more than one font
++		ParaPr.FontAscii    = TextPr.RFonts && TextPr.RFonts.Ascii ? TextPr.RFonts.Ascii.Name : undefined;
++		ParaPr.FontEastAsia = TextPr.RFonts && TextPr.RFonts.EastAsia ? TextPr.RFonts.EastAsia.Name : undefined;
+ 		//-----------------------------------------------------------------------------
+ 
+ 		if (true === ParaPr.Spacing.AfterAutoSpacing)
+@@ -4203,6 +4206,17 @@ background-repeat: no-repeat;\
+ 			if (undefined !== Props.Ligatures)
+ 				TextPr.Ligatures = Props.Ligatures;
+ 
++			// As Word's font dialog: the Latin font sets w:ascii and w:hAnsi,
++			// the East Asian font w:eastAsia, and each leaves the other alone
++			if (Props.FontAscii)
++			{
++				TextPr.RFonts.Ascii = {Name : Props.FontAscii, Index : -1};
++				TextPr.RFonts.HAnsi = {Name : Props.FontAscii, Index : -1};
++			}
++
++			if (Props.FontEastAsia)
++				TextPr.RFonts.EastAsia = {Name : Props.FontEastAsia, Index : -1};
++
+ 			oLogicDocument.AddToParagraph(new AscCommonWord.ParaTextPr(TextPr));
+ 			oLogicDocument.Recalculate();
+ 			oLogicDocument.UpdateInterface();
+-- 
+2.50.1 (Apple Git-155)
+

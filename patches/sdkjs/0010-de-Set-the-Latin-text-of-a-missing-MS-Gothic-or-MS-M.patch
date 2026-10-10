@@ -1,0 +1,305 @@
+From 25d59cd6c625084b77aae38afc83c8f728074e64 Mon Sep 17 00:00:00 2001
+From: ja-office-fixes <ja-office-fixes@localhost>
+Date: Sun, 11 Oct 2026 06:16:01 +0900
+Subject: [PATCH] [de] Set the Latin text of a missing MS Gothic or MS Mincho
+ in BIZ UD
+
+MS Gothic and MS Mincho give every Latin letter half the width of a
+kanji. When they are not installed, the font picked for them (Arial
+Unicode MS on a Mac) is proportional, so lines break elsewhere than in
+Word. BIZ UDGothic and BIZ UDMincho have the same widths for every
+letter, kana and kanji, so the Latin slots use them when they are
+installed. The name shown and saved stays MS Gothic or MS Mincho, and
+the East Asian text keeps the font picked as before.
+---
+ common/Drawings/Metafile.js       |  4 +-
+ common/Drawings/TextDrawer.js     |  4 +-
+ common/libfont/map.js             | 23 +++++++++
+ common/libfont/textmeasurer.js    |  4 +-
+ tests/word/styles/latinFonts.html | 36 +++++++++++++
+ tests/word/styles/latinFonts.js   | 85 +++++++++++++++++++++++++++++++
+ word/Drawing/Graphics.js          |  4 +-
+ word/Editor/Styles.js             |  3 ++
+ 8 files changed, 155 insertions(+), 8 deletions(-)
+ create mode 100644 tests/word/styles/latinFonts.html
+ create mode 100644 tests/word/styles/latinFonts.js
+
+diff --git a/common/Drawings/Metafile.js b/common/Drawings/Metafile.js
+index 991cc84..b0ad0f8 100644
+--- a/common/Drawings/Metafile.js
++++ b/common/Drawings/Metafile.js
+@@ -2688,7 +2688,7 @@
+ 			{
+ 				case fontslot_ASCII:
+ 				{
+-					_lastFont.Name   = _rfonts.Ascii.Name;
++					_lastFont.Name   = AscFonts.getLatinFontName(_rfonts.Ascii.Name);
+ 					_lastFont.Size   = this.m_oTextPr.FontSize;
+ 					_lastFont.Bold   = this.m_oTextPr.Bold;
+ 					_lastFont.Italic = this.m_oTextPr.Italic;
+@@ -2716,7 +2716,7 @@
+ 				case fontslot_HAnsi:
+ 				default:
+ 				{
+-					_lastFont.Name   = _rfonts.HAnsi.Name;
++					_lastFont.Name   = AscFonts.getLatinFontName(_rfonts.HAnsi.Name);
+ 					_lastFont.Size   = this.m_oTextPr.FontSize;
+ 					_lastFont.Bold   = this.m_oTextPr.Bold;
+ 					_lastFont.Italic = this.m_oTextPr.Italic;
+diff --git a/common/Drawings/TextDrawer.js b/common/Drawings/TextDrawer.js
+index 5233b82..96991da 100644
+--- a/common/Drawings/TextDrawer.js
++++ b/common/Drawings/TextDrawer.js
+@@ -2249,7 +2249,7 @@
+ 
+ 		switch (slot) {
+ 			case fontslot_ASCII: {
+-				_lastFont.Name = _rfonts.Ascii.Name;
++				_lastFont.Name = AscFonts.getLatinFontName(_rfonts.Ascii.Name);
+ 				_lastFont.Size = this.m_oTextPr.FontSize;
+ 				_lastFont.Bold = this.m_oTextPr.Bold;
+ 				_lastFont.Italic = this.m_oTextPr.Italic;
+@@ -2274,7 +2274,7 @@
+ 			}
+ 			case fontslot_HAnsi:
+ 			default: {
+-				_lastFont.Name = _rfonts.HAnsi.Name;
++				_lastFont.Name = AscFonts.getLatinFontName(_rfonts.HAnsi.Name);
+ 				_lastFont.Size = this.m_oTextPr.FontSize;
+ 				_lastFont.Bold = this.m_oTextPr.Bold;
+ 				_lastFont.Italic = this.m_oTextPr.Italic;
+diff --git a/common/libfont/map.js b/common/libfont/map.js
+index e8fe34c..365704b 100644
+--- a/common/libfont/map.js
++++ b/common/libfont/map.js
+@@ -3105,6 +3105,28 @@
+ 
+ 	var g_fontApplication = new CApplicationFonts();
+ 
++	// The font for the Latin text of a font that is not installed. MS Gothic
++	// and MS Mincho give every Latin letter half the width of a kanji, and
++	// the font picked for them otherwise (Arial Unicode MS on a Mac) does not,
++	// so lines would break elsewhere than in Word. BIZ UDGothic and
++	// BIZ UDMincho have the same widths for every letter, kana and kanji.
++	// Their East Asian text keeps the font picked as before
++	var g_latinReplacements = {
++		"MS Gothic"   : "BIZ UDGothic",
++		"ＭＳ ゴシック" : "BIZ UDGothic",
++		"MS Mincho"   : "BIZ UDMincho",
++		"ＭＳ 明朝"     : "BIZ UDMincho"
++	};
++	function getLatinFontName(name)
++	{
++		var replacement = g_latinReplacements[name];
++		if (!replacement
++			|| undefined !== AscFonts.g_map_font_index[name]
++			|| undefined === AscFonts.g_map_font_index[replacement])
++			return name;
++		return replacement;
++	}
++
+ 	//------------------------------------------------------export------------------------------------------------------
+ 	window['AscFonts'] = window['AscFonts'] || {};
+ 	window['AscFonts'].FontStyle = FontStyle;
+@@ -3114,6 +3136,7 @@
+ 	window['AscFonts'].LanguagesFontSelectTypes = LanguagesFontSelectTypes;
+ 
+ 	window['AscFonts'].g_fontApplication = g_fontApplication;
++	window['AscFonts'].getLatinFontName = getLatinFontName;
+ 
+ 	window['AscFonts']['pickFont'] = function(name, style) {
+ 		var info = AscFonts.g_fontApplication.GetFontInfo(name, style);
+diff --git a/common/libfont/textmeasurer.js b/common/libfont/textmeasurer.js
+index 606797b..f90d494 100644
+--- a/common/libfont/textmeasurer.js
++++ b/common/libfont/textmeasurer.js
+@@ -235,7 +235,7 @@
+ 			{
+ 				case fontslot_ASCII:
+ 				{
+-					_lastFont.Name   = _rfonts.Ascii.Name;
++					_lastFont.Name   = AscFonts.getLatinFontName(_rfonts.Ascii.Name);
+ 					_lastFont.Index  = _rfonts.Ascii.Index;
+ 
+ 					_lastFont.Size = this.m_oTextPr.FontSize;
+@@ -269,7 +269,7 @@
+ 				case fontslot_HAnsi:
+ 				default:
+ 				{
+-					_lastFont.Name   = _rfonts.HAnsi.Name;
++					_lastFont.Name   = AscFonts.getLatinFontName(_rfonts.HAnsi.Name);
+ 					_lastFont.Index  = _rfonts.HAnsi.Index;
+ 
+ 					_lastFont.Size = this.m_oTextPr.FontSize;
+diff --git a/tests/word/styles/latinFonts.html b/tests/word/styles/latinFonts.html
+new file mode 100644
+index 0000000..6456e0f
+--- /dev/null
++++ b/tests/word/styles/latinFonts.html
+@@ -0,0 +1,36 @@
++<!DOCTYPE html>
++<html>
++	<head>
++		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
++
++		<title>Latin font tests</title>
++
++		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
++		<link type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/qunit/2.16.0/qunit.css" rel="stylesheet" media="screen" />
++		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/qunit/2.16.0/qunit.js"></script>
++		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/xregexp/3.2.0/xregexp-all.min.js"></script>
++
++
++		<script type="text/javascript" src="../../../develop/sdkjs/word/scripts.js"></script>
++		<script type="text/javascript">
++			window.sdk_scripts.forEach(function(item){
++				document.write('<script type="text/javascript" src="' + item + '"><\/script>');
++			});
++    	</script>
++
++        <script type="text/javascript" src="../common/common.js"></script>
++        <script type="text/javascript" src="../common/editor.js"></script>
++        <script type="text/javascript" src="../common/document.js"></script>
++        <script type="text/javascript" src="../common/measurer.js"></script>
++
++        <script type="text/javascript" src="latinFonts.js"></script>
++	</head>
++	<body>
++		<h1 id="qunit-header">Paragraph</h1>
++		<h2 id="qunit-banner"></h2>
++		<div id="qunit-testrunner-toolbar"></div>
++		<h2 id="qunit-userAgent"></h2>
++		<ol id="qunit-tests"></ol>
++		<div id="qunit-fixture">test markup, will be hidden</div>
++	</body>
++</html>
+diff --git a/tests/word/styles/latinFonts.js b/tests/word/styles/latinFonts.js
+new file mode 100644
+index 0000000..b24b627
+--- /dev/null
++++ b/tests/word/styles/latinFonts.js
+@@ -0,0 +1,85 @@
++/*
++ * Copyright (C) Ascensio System SIA, 2009-2026
++ *
++ * This program is a free software product. You can redistribute it and/or
++ * modify it under the terms of the GNU Affero General Public License (AGPL)
++ * version 3 as published by the Free Software Foundation, together with the
++ * additional terms provided in the LICENSE file.
++ *
++ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
++ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. For
++ * details, see the GNU AGPL at: https://www.gnu.org/licenses/agpl-3.0.html
++ *
++ * You can contact Ascensio System SIA by email at info@onlyoffice.com
++ * or by postal mail at 20A-6 Ernesta Birznieka-Upisha Street, Riga,
++ * LV-1050, Latvia, European Union.
++ *
++ * The interactive user interfaces in modified versions of the Program
++ * are required to display Appropriate Legal Notices in accordance with
++ * Section 5 of the GNU AGPL version 3.
++ *
++ * No trademark rights are granted under this License.
++ *
++ * All non-code elements of the Product, including illustrations,
++ * icon sets, and technical writing content, are licensed under the
++ * Creative Commons Attribution-ShareAlike 4.0 International License:
++ * https://creativecommons.org/licenses/by-sa/4.0/legalcode
++ *
++ * This license applies only to such non-code elements and does not
++ * modify or replace the licensing terms applicable to the Program's
++ * source code, which remains licensed under the GNU Affero General
++ * Public License v3.
++ *
++ * SPDX-License-Identifier: AGPL-3.0-only
++ */
++
++
++$(function () {
++
++	QUnit.module("Latin fonts of a missing font");
++
++	// Pretend which fonts are installed, then put the list back
++	function withFonts(names, f)
++	{
++		let saved = AscFonts.g_map_font_index;
++		AscFonts.g_map_font_index = {};
++		names.forEach(function (name, i) { AscFonts.g_map_font_index[name] = i; });
++		try { f(); } finally { AscFonts.g_map_font_index = saved; }
++	}
++
++	QUnit.test("MS Gothic and MS Mincho take BIZ UD for Latin text", function (assert)
++	{
++		withFonts(["BIZ UDGothic", "BIZ UDMincho"], function ()
++		{
++			assert.strictEqual(AscFonts.getLatinFontName("ＭＳ ゴシック"), "BIZ UDGothic", "ＭＳ ゴシック");
++			assert.strictEqual(AscFonts.getLatinFontName("MS Gothic"), "BIZ UDGothic", "MS Gothic");
++			assert.strictEqual(AscFonts.getLatinFontName("ＭＳ 明朝"), "BIZ UDMincho", "ＭＳ 明朝");
++			assert.strictEqual(AscFonts.getLatinFontName("MS Mincho"), "BIZ UDMincho", "MS Mincho");
++			// Proportional fonts have other widths, so they are not replaced
++			assert.strictEqual(AscFonts.getLatinFontName("ＭＳ Ｐゴシック"), "ＭＳ Ｐゴシック", "ＭＳ Ｐゴシック");
++			assert.strictEqual(AscFonts.getLatinFontName("Arial"), "Arial", "Arial");
++		});
++		withFonts(["MS Gothic", "BIZ UDGothic"], function ()
++		{
++			assert.strictEqual(AscFonts.getLatinFontName("MS Gothic"), "MS Gothic", "installed");
++		});
++		withFonts([], function ()
++		{
++			assert.strictEqual(AscFonts.getLatinFontName("MS Gothic"), "MS Gothic", "no BIZ UD");
++		});
++	});
++
++	QUnit.test("Only the Latin slots of a run take the replacement", function (assert)
++	{
++		withFonts(["BIZ UDGothic"], function ()
++		{
++			let textPr = new CTextPr();
++			textPr.InitDefault();
++			textPr.RFonts.SetAll("ＭＳ ゴシック", -1);
++			assert.strictEqual(textPr.GetFontInfo(AscWord.fontslot_ASCII).Name, "BIZ UDGothic", "ASCII");
++			assert.strictEqual(textPr.GetFontInfo(AscWord.fontslot_HAnsi).Name, "BIZ UDGothic", "HAnsi");
++			assert.strictEqual(textPr.GetFontInfo(AscWord.fontslot_EastAsia).Name, "ＭＳ ゴシック", "East Asian");
++			assert.strictEqual(textPr.RFonts.Ascii.Name, "ＭＳ ゴシック", "the name kept");
++		});
++	});
++});
+diff --git a/word/Drawing/Graphics.js b/word/Drawing/Graphics.js
+index bc25c04..66ba8fb 100644
+--- a/word/Drawing/Graphics.js
++++ b/word/Drawing/Graphics.js
+@@ -1064,7 +1064,7 @@
+ 		{
+ 			case fontslot_ASCII:
+ 			{
+-				_lastFont.Name   = _rfonts.Ascii.Name;
++				_lastFont.Name   = AscFonts.getLatinFontName(_rfonts.Ascii.Name);
+ 				_lastFont.Size = this.m_oTextPr.FontSize;
+ 				_lastFont.Bold = this.m_oTextPr.Bold;
+ 				_lastFont.Italic = this.m_oTextPr.Italic;
+@@ -1092,7 +1092,7 @@
+ 			case fontslot_HAnsi:
+ 			default:
+ 			{
+-				_lastFont.Name   = _rfonts.HAnsi.Name;
++				_lastFont.Name   = AscFonts.getLatinFontName(_rfonts.HAnsi.Name);
+ 				_lastFont.Size = this.m_oTextPr.FontSize;
+ 				_lastFont.Bold = this.m_oTextPr.Bold;
+ 				_lastFont.Italic = this.m_oTextPr.Italic;
+diff --git a/word/Editor/Styles.js b/word/Editor/Styles.js
+index bab9d19..1503648 100644
+--- a/word/Editor/Styles.js
++++ b/word/Editor/Styles.js
+@@ -15301,6 +15301,9 @@ CTextPr.prototype.GetFontInfo = function(nFontSlot)
+ 		}
+ 	}
+ 
++	if (AscWord.fontslot_ASCII === nFontSlot || AscWord.fontslot_HAnsi === nFontSlot)
++		sFontName = AscFonts.getLatinFontName(sFontName);
++
+ 	return new AscFonts.CTextFontInfo(sFontName, (isBold ? 1  : 0) | (isItalic ? 2 : 0), nFontSize);
+ };
+ 
+-- 
+2.50.1 (Apple Git-155)
+
