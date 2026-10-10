@@ -1,0 +1,368 @@
+From 1c02226230c492a0cb01b4ab6794f92b605949c9 Mon Sep 17 00:00:00 2001
+From: ja-office-fixes <ja-office-fixes@localhost>
+Date: Sat, 10 Oct 2026 22:11:55 +0900
+Subject: [PATCH] [de] Use the theme's script font for East Asian text
+
+A theme lists a font for each script (a:font, ECMA-376 20.1.4.1.16),
+and Office themes leave a:ea empty and name the Japanese font in
+<a:font script="Jpan">. The list was skipped when the theme was read,
+so minorEastAsia fell back to the Latin font and Japanese text was
+drawn in a Chinese face.
+
+Word picks the script by w:themeFontLang (17.15.1.88). The binary has
+no such setting, so the East Asian language of the text (w:lang
+eastAsia) stands in for it. The list is also written back on save.
+---
+ common/Drawings/Format/Format.js  |  43 +++++++++++-
+ common/Shapes/Serialize.js        |  41 ++++++++++-
+ common/Shapes/SerializeWriter.js  |   9 +++
+ tests/word/styles/themeFonts.html |  36 ++++++++++
+ tests/word/styles/themeFonts.js   | 111 ++++++++++++++++++++++++++++++
+ word/Editor/Styles.js             |   5 +-
+ 6 files changed, 239 insertions(+), 6 deletions(-)
+ create mode 100644 tests/word/styles/themeFonts.html
+ create mode 100644 tests/word/styles/themeFonts.js
+
+diff --git a/common/Drawings/Format/Format.js b/common/Drawings/Format/Format.js
+index 5048011..bde23e4 100644
+--- a/common/Drawings/Format/Format.js
++++ b/common/Drawings/Format/Format.js
+@@ -9980,6 +9980,8 @@
+ 			this.latin = null;
+ 			this.ea = null;
+ 			this.cs = null;
++			// The script fonts (a:font, ECMA-376 20.1.4.1.16) as {script, typeface}
++			this.fonts = [];
+ 			if (fontScheme) {
+ 				this.setFontScheme(fontScheme);
+ 			}
+@@ -10006,6 +10008,16 @@
+ 			if (this.fontScheme)
+ 				this.fontScheme.checkFromFontCollection(pr, this, FONT_REGION_CS);
+ 		};
++		FontCollection.prototype.addFont = function (script, typeface) {
++			this.fonts.push({script: script, typeface: typeface});
++		};
++		FontCollection.prototype.getFont = function (script) {
++			for (var i = 0; i < this.fonts.length; ++i) {
++				if (this.fonts[i].script === script)
++					return this.fonts[i].typeface;
++			}
++			return null;
++		};
+ 		FontCollection.prototype.Write_ToBinary = function (w) {
+ 			writeString(w, this.latin);
+ 			writeString(w, this.ea);
+@@ -10065,6 +10077,8 @@
+ 			oCopy.minorFont.setLatin(this.minorFont.latin);
+ 			oCopy.minorFont.setEA(this.minorFont.ea);
+ 			oCopy.minorFont.setCS(this.minorFont.cs);
++			oCopy.majorFont.fonts = this.majorFont.fonts.slice();
++			oCopy.minorFont.fonts = this.minorFont.fonts.slice();
+ 			return oCopy;
+ 		};
+ 		FontScheme.prototype.Refresh_RecalcData = function () {
+@@ -10120,9 +10134,34 @@
+ 				}
+ 			}
+ 		};
+-		FontScheme.prototype.checkFont = function (font) {
++		// The ISO 15924 script of the theme fonts for an East Asian language
++		// (an LCID), as Word picks them by w:themeFontLang (ECMA-376 17.15.1.88)
++		function getEastAsianScript(lcid) {
++			switch (lcid & 0x3FF) {
++				case 0x11: return "Jpan";
++				case 0x12: return "Hang";
++				case 0x04: return (0x0404 === lcid || 0x0C04 === lcid || 0x1404 === lcid) ? "Hant" : "Hans";
++			}
++			return null;
++		}
++		FontScheme.prototype.getEastAsianFont = function (font, lcid) {
++			var script = lcid ? getEastAsianScript(lcid) : null;
++			if (!script)
++				return null;
++			if ("+mn-ea" === font || "minorEastAsia" === font)
++				return this.minorFont.getFont(script);
++			if ("+mj-ea" === font || "majorEastAsia" === font)
++				return this.majorFont.getFont(script);
++			return null;
++		};
++		// eastAsiaLcid: the East Asian language of the text. The binary has no
++		// w:themeFontLang, so the language of the text stands in for it
++		FontScheme.prototype.checkFont = function (font, eastAsiaLcid) {
+ 			if (g_oThemeFontsName[font]) {
+-				if (this.fontMap[font]) {
++				var scriptFont = this.getEastAsianFont(font, eastAsiaLcid);
++				if (scriptFont) {
++					return scriptFont;
++				} else if (this.fontMap[font]) {
+ 					return this.fontMap[font];
+ 				} else if (this.fontMap["+mn-lt"]) {
+ 					return this.fontMap["+mn-lt"];
+diff --git a/common/Shapes/Serialize.js b/common/Shapes/Serialize.js
+index f8a03c5..831d1fc 100644
+--- a/common/Shapes/Serialize.js
++++ b/common/Shapes/Serialize.js
+@@ -5276,8 +5276,13 @@ function BinaryPPTYLoader()
+                 }
+                 case 3:
+                 {
+-                    var _len = s.GetULong();
+-                    s.Skip2(_len);
++                    s.Skip2(4); // len
++                    var _c = s.GetULong();
++                    for (var i = 0; i < _c; i++)
++                    {
++                        s.Skip2(1); // type
++                        this.ReadSupplementalFont(fontcolls);
++                    }
+                     break;
+                 }
+                 default:
+@@ -5291,6 +5296,38 @@ function BinaryPPTYLoader()
+         s.Seek2(_end_rec);
+     };
+ 
++    this.ReadSupplementalFont = function(fontcolls)
++    {
++        var s = this.stream;
++
++        var _rec_start = s.cur;
++        var _end_rec = _rec_start + s.GetULong() + 4;
++
++        var script = "";
++        var typeface = "";
++
++        s.Skip2(1); // start attributes
++
++        while (true)
++        {
++            var _at = s.GetUChar();
++            if (_at == g_nodeAttributeEnd)
++                break;
++
++            if (0 == _at)
++                script = s.GetString2();
++            else if (1 == _at)
++                typeface = s.GetString2();
++            else
++                break;
++        }
++
++        if (script)
++            fontcolls.addFont(script, typeface);
++
++        s.Seek2(_end_rec);
++    };
++
+     this.ReadTextFontTypeface = function()
+     {
+         var s = this.stream;
+diff --git a/common/Shapes/SerializeWriter.js b/common/Shapes/SerializeWriter.js
+index bd0100a..29f0589 100644
+--- a/common/Shapes/SerializeWriter.js
++++ b/common/Shapes/SerializeWriter.js
+@@ -1628,6 +1628,15 @@ function CBinaryFileWriter()
+         oThis.WriteRecord1(0, { Name: coll.latin, Index : -1 }, oThis.WriteTextFontTypeface);
+         oThis.WriteRecord1(1, { Name: coll.ea, Index : -1 }, oThis.WriteTextFontTypeface);
+         oThis.WriteRecord1(2, { Name: coll.cs, Index : -1 }, oThis.WriteTextFontTypeface);
++        if (coll.fonts && coll.fonts.length > 0)
++            oThis.WriteRecordArray(3, 0, coll.fonts, oThis.WriteSupplementalFont);
++    };
++    this.WriteSupplementalFont = function(font)
++    {
++        oThis.WriteUChar(g_nodeAttributeStart);
++        oThis._WriteString1(0, font.script);
++        oThis._WriteString1(1, font.typeface);
++        oThis.WriteUChar(g_nodeAttributeEnd);
+     };
+     this.WriteFmtScheme = function(fmt)
+     {
+diff --git a/tests/word/styles/themeFonts.html b/tests/word/styles/themeFonts.html
+new file mode 100644
+index 0000000..39aaa7c
+--- /dev/null
++++ b/tests/word/styles/themeFonts.html
+@@ -0,0 +1,36 @@
++<!DOCTYPE html>
++<html>
++	<head>
++		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
++
++		<title>Theme fonts tests</title>
++
++		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
++		<link type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/qunit/2.16.0/qunit.css" rel="stylesheet" media="screen" />
++		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/qunit/2.16.0/qunit.js"></script>
++		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/xregexp/3.2.0/xregexp-all.min.js"></script>
++
++
++		<script type="text/javascript" src="../../../develop/sdkjs/word/scripts.js"></script>
++		<script type="text/javascript">
++			window.sdk_scripts.forEach(function(item){
++				document.write('<script type="text/javascript" src="' + item + '"><\/script>');
++			});
++    	</script>
++
++        <script type="text/javascript" src="../common/common.js"></script>
++        <script type="text/javascript" src="../common/editor.js"></script>
++        <script type="text/javascript" src="../common/document.js"></script>
++        <script type="text/javascript" src="../common/measurer.js"></script>
++
++        <script type="text/javascript" src="themeFonts.js"></script>
++	</head>
++	<body>
++		<h1 id="qunit-header">Paragraph</h1>
++		<h2 id="qunit-banner"></h2>
++		<div id="qunit-testrunner-toolbar"></div>
++		<h2 id="qunit-userAgent"></h2>
++		<ol id="qunit-tests"></ol>
++		<div id="qunit-fixture">test markup, will be hidden</div>
++	</body>
++</html>
+diff --git a/tests/word/styles/themeFonts.js b/tests/word/styles/themeFonts.js
+new file mode 100644
+index 0000000..015d30d
+--- /dev/null
++++ b/tests/word/styles/themeFonts.js
+@@ -0,0 +1,111 @@
++/*
++ * Copyright (C) Ascensio System SIA, 2009-2026
++ *
++ * This program is a free software product. You can redistribute it and/or
++ * modify it under the terms of the GNU Affero General Public License (AGPL)
++ * version 3 as published by the Free Software Foundation, together with the
++ * additional terms provided in the LICENSE file.
++ *
++ * This program is distributed WITHOUT ANY WARRANTY; without even the implied
++ * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. For
++ * details, see the GNU AGPL at: https://www.gnu.org/licenses/agpl-3.0.html
++ *
++ * You can contact Ascensio System SIA by email at info@onlyoffice.com
++ * or by postal mail at 20A-6 Ernesta Birznieka-Upisha Street, Riga,
++ * LV-1050, Latvia, European Union.
++ *
++ * The interactive user interfaces in modified versions of the Program
++ * are required to display Appropriate Legal Notices in accordance with
++ * Section 5 of the GNU AGPL version 3.
++ *
++ * No trademark rights are granted under this License.
++ *
++ * All non-code elements of the Product, including illustrations,
++ * icon sets, and technical writing content, are licensed under the
++ * Creative Commons Attribution-ShareAlike 4.0 International License:
++ * https://creativecommons.org/licenses/by-sa/4.0/legalcode
++ *
++ * This license applies only to such non-code elements and does not
++ * modify or replace the licensing terms applicable to the Program's
++ * source code, which remains licensed under the GNU Affero General
++ * Public License v3.
++ *
++ * SPDX-License-Identifier: AGPL-3.0-only
++ */
++
++
++$(function () {
++
++	// A theme as Office writes it: a:ea is empty and the East Asian fonts
++	// are in the script list (a:font, ECMA-376 20.1.4.1.16)
++	function createFontScheme()
++	{
++		let fontScheme = new AscFormat.FontScheme();
++		fontScheme.majorFont.setLatin("Yu Gothic Light");
++		fontScheme.majorFont.setEA("");
++		fontScheme.majorFont.addFont("Jpan", "游ゴシック Light");
++		fontScheme.minorFont.setLatin("Yu Mincho");
++		fontScheme.minorFont.setEA("");
++		fontScheme.minorFont.addFont("Jpan", "游明朝");
++		fontScheme.minorFont.addFont("Hang", "맑은 고딕");
++		fontScheme.minorFont.addFont("Hans", "等线");
++		fontScheme.minorFont.addFont("Hant", "新細明體");
++		return fontScheme;
++	}
++
++	QUnit.module("Theme fonts");
++
++	QUnit.test("The script font is used for the East Asian language", function (assert)
++	{
++		let fontScheme = createFontScheme();
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia", 1041), "游明朝", "ja-JP");
++		assert.strictEqual(fontScheme.checkFont("+mn-ea", 1041), "游明朝", "+mn-ea, ja-JP");
++		assert.strictEqual(fontScheme.checkFont("majorEastAsia", 1041), "游ゴシック Light", "major, ja-JP");
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia", 1042), "맑은 고딕", "ko-KR");
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia", 2052), "等线", "zh-CN");
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia", 4100), "等线", "zh-SG");
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia", 1028), "新細明體", "zh-TW");
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia", 3076), "新細明體", "zh-HK");
++
++		// No language, a language without a script font, or a script the
++		// theme does not list: as before
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia"), "Yu Mincho", "no language");
++		assert.strictEqual(fontScheme.checkFont("minorEastAsia", 1033), "Yu Mincho", "en-US");
++		// (an empty theme font falls back to the minor Latin font)
++		assert.strictEqual(fontScheme.checkFont("majorEastAsia", 1042), "Yu Mincho", "major, ko-KR");
++
++		// Only the East Asian theme fonts follow the language
++		assert.strictEqual(fontScheme.checkFont("minorHAnsi", 1041), "Yu Mincho", "minorHAnsi");
++		assert.strictEqual(fontScheme.checkFont("MS Mincho", 1041), "MS Mincho", "a font name");
++	});
++
++	QUnit.test("A run takes the East Asian theme font of its language", function (assert)
++	{
++		let fontScheme = createFontScheme();
++		let textPr = new CTextPr();
++		textPr.RFonts.SetAll("Arial", -1);
++		textPr.RFonts.AsciiTheme    = "minorHAnsi";
++		textPr.RFonts.EastAsiaTheme = "minorEastAsia";
++		textPr.Lang.EastAsia = 1041;
++		textPr.ReplaceThemeFonts(fontScheme);
++		assert.strictEqual(textPr.RFonts.EastAsia.Name, "游明朝", "East Asian font");
++		assert.strictEqual(textPr.RFonts.Ascii.Name, "Yu Mincho", "Latin font");
++	});
++
++	QUnit.test("The script fonts are kept through the binary", function (assert)
++	{
++		let fontScheme = createFontScheme();
++		let writer = new AscCommon.CBinaryFileWriter();
++		writer.WriteRecord1(0, fontScheme, writer.WriteFontScheme);
++
++		let loader = new AscCommon.BinaryPPTYLoader();
++		loader.stream = new AscCommon.FileStream(writer.data, writer.pos);
++		loader.stream.Skip2(1); // type
++		let read = new AscFormat.FontScheme();
++		loader.ReadFontScheme(read);
++		assert.deepEqual(read.minorFont.fonts, fontScheme.minorFont.fonts, "minor");
++		assert.deepEqual(read.majorFont.fonts, fontScheme.majorFont.fonts, "major");
++		assert.strictEqual(read.checkFont("minorEastAsia", 1041), "游明朝", "ja-JP after reading");
++		assert.deepEqual(fontScheme.createDuplicate().minorFont.fonts, fontScheme.minorFont.fonts, "copy");
++	});
++});
+diff --git a/word/Editor/Styles.js b/word/Editor/Styles.js
+index 080533b..bab9d19 100644
+--- a/word/Editor/Styles.js
++++ b/word/Editor/Styles.js
+@@ -13869,10 +13869,11 @@ CTextPr.prototype.ReplaceThemeFonts = function(oFontScheme)
+ 			this.RFonts.Ascii.Index = -1;
+ 		}
+ 
++		var eastAsiaLcid = this.Lang ? this.Lang.EastAsia : undefined;
+ 		if (this.RFonts.EastAsiaTheme)
+ 		{
+ 			this.RFonts.EastAsia = {
+-				Name  : oFontScheme.checkFont(this.RFonts.EastAsiaTheme),
++				Name  : oFontScheme.checkFont(this.RFonts.EastAsiaTheme, eastAsiaLcid),
+ 				Index : -1
+ 			};
+ 
+@@ -13880,7 +13881,7 @@ CTextPr.prototype.ReplaceThemeFonts = function(oFontScheme)
+ 		}
+ 		else if (this.RFonts.EastAsia)
+ 		{
+-			this.RFonts.EastAsia.Name  = oFontScheme.checkFont(this.RFonts.EastAsia.Name);
++			this.RFonts.EastAsia.Name  = oFontScheme.checkFont(this.RFonts.EastAsia.Name, eastAsiaLcid);
+ 			this.RFonts.EastAsia.Index = -1;
+ 		}
+ 
+-- 
+2.50.1 (Apple Git-155)
+

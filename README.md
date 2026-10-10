@@ -86,6 +86,18 @@ ECMA-376 には定めが無いので、日本語の環境の Excel(Mac の Excel
   `[DBNum3]` は数字を全角にするだけです(令和８年１０月８日)。
 - 表示形式に `[$-411]` が無いときは、ブックの言語が日本語の場合に替えます。
 
+### 日本語の書体(文書)
+
+Office のテーマは、東アジアの書体(`<a:ea>`)を空にして、日本語の書体を `<a:font script="Jpan">` に書きます。
+今の ONLYOFFICE はこの一覧を読み飛ばすので、テーマの書体を使う日本語の文が、欧文の書体や中国語の書体で表示されます。
+
+- テーマの書体の一覧を読み、日本語の文には `Jpan` の書体を使います(テーマが游明朝なら游明朝)。
+  韓国語は `Hang`、中国語は `Hans` と `Hant` の書体を使います。
+- Word は、どの言語の書体を使うかを `w:themeFontLang` で決めます(ECMA-376 Part 1, 17.15.1.88)。
+  この設定は変換器(core)から sdkjs に渡らないので、代わりに文字の言語(`w:lang` の `eastAsia`)で決めます。
+  日本語の Word で作った文書では、どちらも `ja-JP` です。
+- 保存するときも、テーマの書体の一覧を残します。
+
 ## 使い方(Linux)
 
 このリポジトリは、直した ONLYOFFICE そのものは配っていません。
@@ -265,6 +277,7 @@ docx をダブルクリックして開くようにするときは、Finder で d
 - 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦、日本語の関数、漢数字の試験を足しました。
   漢数字の試験の答えは、Mac の Excel に印刷させて確かめた値です。
   文字列の関数の試験のうち「TEXT」の 1 件は、パッチを当てる前から node では落ちます。
+- テーマの書体の試験を足しました(`tests/word/styles/themeFonts.js`)。
 
 ```bash
 node tests/sdkjs_node/qunit.js work/sdkjs/tests/word/document-calculation/paragraph/paragraph-lines.js
@@ -278,6 +291,7 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 - 縦書きの「、」「。」は位置を寄せただけで、書体の縦書き用の字形は使っていません。
 - ルビ、傍点、ふりがなの保存など。
 - 漢数字の `[DBNum4]`。Excel でも表示が変わらなかったので、そのままです。
+- 手元に無い書体の置き換え。Mac にはＭＳ ゴシックが無いので、テーマがＭＳ ゴシックの文は Arial Unicode MS で表示されます。
 
 ## ライセンスと表示
 
@@ -295,7 +309,7 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 ## English
 
 Patches for the document and spreadsheet editors of ONLYOFFICE Desktop Editors that fix Japanese
-line breaking, vertical writing, dates in the Japanese era, Japanese text functions and Japanese numerals. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
+line breaking, vertical writing, dates in the Japanese era, Japanese text functions, Japanese numerals and the Japanese theme fonts. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
 
 - Lines break between kana (they used to move to the next line as one word).
 - A character that may not begin a line (。、」 …) hangs one character past the line end, as in Word,
@@ -314,6 +328,10 @@ line breaking, vertical writing, dates in the Japanese era, Japanese text functi
   Japanese locale (ECMA-376 does not define them): with General by place value (1234 = 千二百三十四,
   壱阡弐百参拾四 or 千２百３十４), with other number formats digit by digit (一,二三四), and in dates
   (令和八年十月八日). Before, only `[DBNum1]` with `[$-411]` worked, digit by digit.
+- Text in the theme's East Asian font uses the font the theme lists for its script
+  (`<a:font script="Jpan">`, 游明朝 in Office's themes), as Office themes leave `<a:ea>` empty.
+  Word picks the script by `w:themeFontLang`, which does not reach sdkjs, so the East Asian language of
+  the text (`w:lang eastAsia`) is used instead. The list is kept on save.
 
 ### Use (Linux)
 
