@@ -1,4 +1,4 @@
-From 59799c8237a3ef6fbbf50a651f874a3e1a4c9594 Mon Sep 17 00:00:00 2001
+From e686d7a14b9684d917dedf716ad679d7ccbe282c Mon Sep 17 00:00:00 2001
 From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
 Date: Thu, 8 Oct 2026 00:34:10 +0900
 Subject: [PATCH] [se] Show dates in the Japanese era with the g, e and r
@@ -27,6 +27,11 @@ tag; it is read as ja-jp. G/標準, the Japanese name of General, was
 shown as text and is now General, so the new g does not turn it into
 "R/標準".
 
+g and r are read after the date and time letters. TEXT reads its
+format in the letters of the workbook's language, where g or r can be
+one of them (gg is the day in Italian and Turkish), and it stays that
+letter.
+
 Assisted-by: ClaudeCode:claude-opus-5-5
 ---
  common/NumFormat.js                           | 101 +++++++++++++++++-
@@ -34,7 +39,7 @@ Assisted-by: ClaudeCode:claude-opus-5-5
  2 files changed, 138 insertions(+), 4 deletions(-)
 
 diff --git a/common/NumFormat.js b/common/NumFormat.js
-index a39f570..b561419 100644
+index a39f570..437b341 100644
 --- a/common/NumFormat.js
 +++ b/common/NumFormat.js
 @@ -71,6 +71,11 @@ var numFormat_AmPm = 19;
@@ -76,7 +81,7 @@ index a39f570..b561419 100644
  function FormatObjDateVal(type, nCount, bElapsed)
  {
      this.type = type;
-@@ -930,6 +955,27 @@ NumFormat.prototype =
+@@ -930,6 +955,19 @@ NumFormat.prototype =
                      var sign = ("+" == nextnext) ? SignType.Positive : SignType.Negative;
                      this._addToFormat2(new FormatObjScientific(next, "", sign));
                  }
@@ -93,7 +98,13 @@ index a39f570..b561419 100644
 +                // G/標準 is General in Japanese
 +                this._addToFormat(numFormat_General);
 +                this._skip(3);
-+            }
+             }
+             else if("*" == next)
+             {
+@@ -979,6 +1017,14 @@ NumFormat.prototype =
+ 			{
+ 				this._addToFormat2(new FormatObjDateVal(numFormat_DayOfWeek, 1, false));
+ 			}
 +            else if("G" == next || "g" == next)
 +            {
 +                this._addToFormat2(new FormatObjDateVal(numFormat_Era, 1, false));
@@ -101,9 +112,10 @@ index a39f570..b561419 100644
 +            else if("R" == next || "r" == next)
 +            {
 +                this._addToFormat2(new FormatObjDateVal(numFormat_EraR, 1, false));
-             }
-             else if("*" == next)
-             {
++            }
+             else {
+                 bNoFormat = true;
+                 this._addToFormat(numFormat_Text, next);
 @@ -1151,7 +1197,7 @@ NumFormat.prototype =
                  }
              }
@@ -273,5 +285,5 @@ index cc6701d..8277b03 100644
          let testCases = [
              // Date format cases
 -- 
-2.43.0
+2.47.3
 
