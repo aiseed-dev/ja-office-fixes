@@ -106,6 +106,15 @@ Office のテーマは、東アジアの書体(`<a:ea>`)を空にして、日本
   漢字とかなは、今までどおり ONLYOFFICE が選ぶ書体です(Mac では Arial Unicode MS。幅と字の形がＭＳ ゴシックに近い書体です)。
   文書に書く書体の名前は、ＭＳ ゴシックのままです。
 
+### 日本語と英数字の間(文書)
+
+Word は、漢字・かなと英字・数字の間を少し空けます(「日本語と英字の間隔を自動調整する」「日本語と数字の間隔を自動調整する」、
+`w:autoSpaceDE` と `w:autoSpaceDN`)。文書で切っていなければ、どちらも有効です(ECMA-376 Part 1, 17.3.1.2、17.3.1.3)。
+今の ONLYOFFICE は空けません。
+
+- 漢字・かなと、英字・数字が隣り合うところで、前の字の後ろを文字の大きさの 4 分の 1 空けます(四分アキ)。
+- 空白、約物(「」、。など)、全角の英数字の隣は空けません。
+
 ## 使い方(Linux)
 
 このリポジトリは、直した ONLYOFFICE そのものは配っていません。
@@ -303,6 +312,10 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 - ルビ、傍点、ふりがなの保存など。
 - 漢数字の `[DBNum4]`。Excel でも表示が変わらなかったので、そのままです。
 - 手元に無い書体の置き換え。Mac にはＭＳ ゴシックが無いので、テーマがＭＳ ゴシックの文は Arial Unicode MS で表示されます。
+- 日本語と英数字の間の空きを切った段落(`w:autoSpaceDE="0"` など)。この設定は変換器(core)から sdkjs に渡らないので、
+  切った段落も空きます。
+- 日本語と英数字の間の空きの量と、行末の扱いは、まだ Word と比べていません。
+  今は、行末の字の後ろの空きも、行に収まるかどうかに数えます。
 
 ## ライセンスと表示
 
@@ -348,6 +361,9 @@ line breaking, vertical writing, dates in the Japanese era, Japanese text functi
 - When MS Gothic or MS Mincho is not installed, their Latin text is set in BIZ UDGothic or BIZ UDMincho
   (when those are installed), which have the same half-width Latin letters, so lines break as in Word.
   Kana and kanji keep the font ONLYOFFICE picks, and the name saved stays MS Gothic or MS Mincho.
+- A quarter of the font size stands between kanji or kana and Latin letters or digits, as Word's
+  `w:autoSpaceDE` and `w:autoSpaceDN` add space there; none next to spaces, punctuation or full-width forms.
+  The setting does not reach sdkjs, so a paragraph that turns it off gets the space too.
 
 ### Use (Linux)
 

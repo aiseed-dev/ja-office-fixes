@@ -5,7 +5,7 @@
 The docx files use IPAex Mincho at 10.5pt on a line exactly 40
 full-width characters wide (420pt), so where a line breaks can be read
 from a PDF. tests/documents keeps the ones this project fixes
-(01, 02, 05 and 12); the others show Japanese features still missing.
+(01, 02, 05, 12 and 13); the others show Japanese features still missing.
 """
 import datetime
 import sys
@@ -82,6 +82,16 @@ box = ('<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">
        '<wps:bodyPr rot="0" vert="eaVert" wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="t"/>'
        '</wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>')
 docx("12-vertical-textbox.docx", box + sect())
+# The space between kana or kanji and Latin letters or digits (w:autoSpaceDE,
+# w:autoSpaceDN): on, off, next to punctuation and full-width forms, and at
+# the end of a line
+off = '<w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/>'
+mixed = "漢字ABC漢字123漢字abcかなXYZカナ"
+docx("13-autospace.docx",
+     para(mixed) + para(mixed, off)
+     + para("「ABC」と（123）、Word。漢字(ABC)漢字A.漢字") + para("漢字ＡＢＣ漢字１２３漢字")
+     + para("漢字 ABC 漢字") + para("漢" * 38 + "12漢字の行") + para("漢" * 39 + "1漢字の行")
+     + para("漢" * 38 + "12漢字の行", off) + sect())
 
 # Japanese paragraph and character properties that a round trip should keep
 body = (
