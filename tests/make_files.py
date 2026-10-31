@@ -136,9 +136,9 @@ wb.save(f"{OUT}/08-kansuji.xlsx")
 
 wb = openpyxl.Workbook()
 ws = wb.active
-rows = [("ｱｲｳ", "=ASC(A1)", "=UNICODE(ASC(A1))"), ("アイウ", "=ASC(A2)", None), ("ABC123ｱｲｳ", "=JIS(A3)", None),
+rows = [("ｱｲｳ", "=ASC(A1)", "=_xlfn.UNICODE(ASC(A1))"), ("アイウ", "=ASC(A2)", None), ("ABC123ｱｲｳ", "=DBCS(A3)", None),
         ("あいう", "=LENB(A4)", "=LEFTB(A4,2)"), ("１２３", "=VALUE(A5)", None), (1234, "=NUMBERSTRING(A6,1)", None),
-        (datetime.date(2019, 5, 1), "=DATESTRING(A7)", None), ("山田", "=PHONETIC(A8)", None), (1234, "=YEN(A9)", None)]
+        (datetime.date(2019, 5, 1), "=DATESTRING(A7)", None), ("山田", "=PHONETIC(A8)", None), (1234, "=DOLLAR(A9)", None)]
 for i, (a, b, c) in enumerate(rows, 1):
     ws.cell(i, 1, a)
     ws.cell(i, 2, b)

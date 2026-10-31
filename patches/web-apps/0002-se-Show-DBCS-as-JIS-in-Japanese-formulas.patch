@@ -1,0 +1,27 @@
+From a48558853148fe0314b6d423bdf0380b17976030 Mon Sep 17 00:00:00 2001
+From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 07:37:25 +0900
+Subject: [PATCH] [se] Show DBCS as JIS in Japanese formulas
+
+Excel keeps the function JIS as DBCS in files and shows it as JIS in
+Japanese, as DOLLAR is YEN. sdkjs now names the function DBCS (patch
+0014 of sdkjs), so the Japanese names give it JIS.
+---
+ apps/spreadsheeteditor/main/resources/formula-lang/ja.json | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/apps/spreadsheeteditor/main/resources/formula-lang/ja.json b/apps/spreadsheeteditor/main/resources/formula-lang/ja.json
+index 6c3818a4..5e2eda31 100644
+--- a/apps/spreadsheeteditor/main/resources/formula-lang/ja.json
++++ b/apps/spreadsheeteditor/main/resources/formula-lang/ja.json
+@@ -96,6 +96,7 @@
+ 	"CONCATENATE": "CONCATENATE",
+ 	"CONCAT": "CONCAT",
+ 	"DOLLAR": "YEN",
++	"DBCS": "JIS",
+ 	"EXACT": "EXACT",
+ 	"FIND": "FIND",
+ 	"FINDB": "FINDB",
+-- 
+2.47.3
+

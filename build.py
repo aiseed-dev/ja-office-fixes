@@ -71,6 +71,10 @@ presentation editor is the official one.
 * The release merges the common strings into each editor's locale files,
   which the build of the repository does not; install adds the patches'
   strings to the release's files instead of replacing them.
+* The spreadsheet editor's screen is not built. The Japanese names of the
+  functions (formula-lang/ja.json, where DBCS is JIS) are the one file of it
+  a patch changes; install adds the names the patched file has and the
+  release's does not.
 
 ## Euro-Office
 
@@ -202,6 +206,8 @@ WEB_PATCHES = ROOT / "patches/web-apps"
 WEB_EDITOR = EDITORS.parent / "web-apps/apps/documenteditor/main"
 WEB_DEPLOY = WEBAPPS / "deploy/web-apps/apps/documenteditor/main"
 WEB_FILES = ("app.js", "code.js")
+# The Japanese names of the spreadsheet functions
+FORMULA_NAMES = EDITORS.parent / "web-apps/apps/spreadsheeteditor/main/resources/formula-lang/ja.json"
 BRANCH = "ja-office-fixes"
 # The types a double-click opens in the patched app: the ones the word
 # editor handles, as the package's own entry names them
@@ -439,6 +445,16 @@ def install() -> None:
         strings.update(json.loads(built.read_text(encoding="utf-8")))
         (WEB_EDITOR / "locale" / built.name).write_text(json.dumps(strings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("installed the patched screen into", WEB_EDITOR)
+    # The release's function names, with the ones the patches add
+    orig = PKG / "orig-formula-lang-ja.json"
+    if not orig.exists():
+        shutil.copy2(FORMULA_NAMES, orig)
+    names = json.loads(orig.read_text(encoding="utf-8"))
+    patched = WEBAPPS / "apps/spreadsheeteditor/main/resources/formula-lang/ja.json"
+    for key, value in json.loads(patched.read_text(encoding="utf-8")).items():
+        names.setdefault(key, value)
+    FORMULA_NAMES.write_text(json.dumps(names, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print("installed the Japanese function names into", FORMULA_NAMES)
     sign()
 
 
@@ -460,6 +476,10 @@ def restore() -> None:
             shutil.copy2(orig / name, WEB_EDITOR / name)
         shutil.copytree(orig / "locale", WEB_EDITOR / "locale", dirs_exist_ok=True)
         print("restored the original screen into", WEB_EDITOR)
+    orig = PKG / "orig-formula-lang-ja.json"
+    if orig.exists():
+        shutil.copy2(orig, FORMULA_NAMES)
+        print("restored the original function names into", FORMULA_NAMES)
     sign()
 
 

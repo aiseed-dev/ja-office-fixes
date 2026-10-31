@@ -61,8 +61,9 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 | `NUMBERSTRING(1234,2)` | #NAME? | 壱阡弐百参拾四 |
 | `NUMBERSTRING(1234,3)` | #NAME? | 一二三四 |
 | `DATESTRING("2026/10/6")` | #NAME? | 令和08年10月06日 |
-| `YEN(1234.567)` | #NAME? | ¥1,235 |
-| `PHONETIC(A1)` | #NAME? | A1 の文字列 |
+| `YEN(1234.567)` | ¥1,234.57 | ¥1,235 |
+| `PHONETIC(A1)`(A1 は「やまだ」) | #NAME? | ヤマダ |
+| Excel の文書の `JIS(A1)` | #NAME? | A1 を全角にした字 |
 
 - ASC と JIS は、英数字・記号・スペース・片仮名の全角と半角を変えます。濁点の付いた字は、全角の 1 字と半角の 2 字(ガ、ｶﾞ)で変わります。
 - LENB・LEFTB・RIGHTB・MIDB・REPLACEB・FINDB・SEARCHB は、日本語の文字コード(シフト JIS)のバイトで数えます。
@@ -71,9 +72,13 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 - NUMBERSTRING は、数を整数に丸めて漢数字にします。2 番目の引数の 1 は「千二百三十四」、2 は「壱阡弐百参拾四」、3 は「一二三四」です。
   表示形式の `[DBNum1]` と `[DBNum2]` と同じ字を使います。
 - DATESTRING は、日付を「令和08年10月06日」の形の和暦にします。
-- YEN は、数を丸めて「¥1,235」の形にします。2 番目の引数は小数の桁数で、省くと 0 です。負の数は「-¥1,235」です。
-- PHONETIC は、セルのふりがなを返す関数です。ONLYOFFICE はふりがなを読み込まないので、セルの文字列をそのまま返します。
-  Excel も、ふりがなの無いセルでは文字列をそのまま返します。
+- YEN は DOLLAR の日本語の名前です。文書の中では DOLLAR です。数を丸めて「¥1,235」の形にします。
+  2 番目の引数は小数の桁数で、省くと 0 です。負の数は「¥-1,235」です。
+- PHONETIC は、セルのふりがなを返す関数です。ONLYOFFICE はふりがなを読み込まないので、セルの文字列を返します。
+  Excel と同じく、平仮名と半角の片仮名は全角の片仮名にします。Excel も、ふりがなの無いセルではこうします。
+- JIS は、文書の中では DBCS という名前です。ONLYOFFICE は JIS の名前で保存していたので、Excel では `#NAME?` になりました。
+  Excel の文書の DBCS も、ONLYOFFICE では `#NAME?` でした。今は、文書の中は DBCS で、画面では JIS です。
+- これらの関数の答えは、Windows の Excel(日本語)で確かめました。
 
 ### 漢数字(表計算)
 
@@ -368,7 +373,7 @@ Windows の zip のエディターのファイルは、Linux 版と同じ大き�
   パッチを当てても、すべて通ります。足した日本語の試験は、パッチの前は落ち、後は通ります。
 
 - 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦、日本語の関数、漢数字の試験を足しました。
-  NUMBERSTRING、DATESTRING、YEN、PHONETIC の試験も足しました。この 4 つの答えは、まだ Excel で確かめていません。
+  NUMBERSTRING、DATESTRING、YEN(DOLLAR)、PHONETIC の試験も足しました。答えは、Windows の Excel に計算させた値です。
   漢数字の試験の答えは、Mac の Excel に印刷させて確かめた値です。
 - テーマの書体の試験と、英数字の書体の置き換えの試験を足しました(`tests/word/styles/themeFonts.js`、`latinFonts.js`)。
 - Euro-Office 9.3.6 でも、同じ試験を回しました。結果は ONLYOFFICE と同じです。
@@ -443,10 +448,12 @@ line breaking, vertical writing, dates in the Japanese era, Japanese text functi
 - A quarter of the font size stands between kanji or kana and Latin letters or digits, as Word's
   `w:autoSpaceDE` and `w:autoSpaceDN` add space there; none next to spaces, punctuation or full-width forms.
   The setting does not reach sdkjs, so a paragraph that turns it off gets the space too.
-- NUMBERSTRING, DATESTRING, YEN and PHONETIC of Japanese Excel work (they gave #NAME?):
-  NUMBERSTRING(1234,1) = 千二百三十四 (2: 壱阡弐百参拾四, 3: 一二三四), DATESTRING("2026/10/6") = 令和08年10月06日,
-  YEN(1234.567) = ¥1,235. The converter drops furigana, so PHONETIC gives the text of the cells, as Excel does for
-  cells without furigana.
+- NUMBERSTRING, DATESTRING and PHONETIC of Japanese Excel work (they gave #NAME?):
+  NUMBERSTRING(1234,1) = 千二百三十四 (2: 壱阡弐百参拾四, 3: 一二三四), DATESTRING("2026/10/6") = 令和08年10月06日.
+  The converter drops furigana, so PHONETIC gives the text of the cells as Excel does for cells without furigana,
+  with hiragana and half-width katakana turned into katakana. YEN, the Japanese name of DOLLAR, shows whole yen
+  by default and the minus after the yen sign (¥1,235, ¥-1,234.57). JIS is kept as DBCS in files, as Excel does;
+  the answers are those of Excel for Windows in Japanese.
 
 ### Use (Linux)
 

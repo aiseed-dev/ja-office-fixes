@@ -1,0 +1,106 @@
+From 903773a26ea531af7645da41a71bba1e5974f0c1 Mon Sep 17 00:00:00 2001
+From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 07:37:07 +0900
+Subject: [PATCH] [se] Keep JIS as DBCS in files, as Excel does
+
+JIS is the Japanese name of DBCS. Excel writes DBCS in files, without
+_xlfn., and shows JIS only on the screen in Japanese. The editor wrote
+JIS, which Excel shows as #NAME?, and gave #NAME? for the DBCS of
+Excel's files, as DBCS was only an empty stub.
+
+The function of JIS is now named DBCS, and the stub is gone. The
+screen in Japanese shows it as JIS through formula-lang/ja.json, which
+the web-apps patch gives the name.
+---
+ cell/model/FormulaObjects/_xlfnFunctions.js      | 16 +---------------
+ .../model/FormulaObjects/textanddataFunctions.js |  4 +++-
+ .../cell/spreadsheet-calculation/FormulaTrace.js |  2 +-
+ .../formula-tests/textAndDataTests.js            | 10 +++++-----
+ 4 files changed, 10 insertions(+), 22 deletions(-)
+
+diff --git a/cell/model/FormulaObjects/_xlfnFunctions.js b/cell/model/FormulaObjects/_xlfnFunctions.js
+index 3c7b4f3..efc07bb 100644
+--- a/cell/model/FormulaObjects/_xlfnFunctions.js
++++ b/cell/model/FormulaObjects/_xlfnFunctions.js
+@@ -79,28 +79,14 @@ function (window, undefined) {
+ 
+ 
+ 	/*new funcions with _xlnf-prefix*/
+-	cFormulaFunctionGroup['TextAndData'] = cFormulaFunctionGroup['TextAndData'] || [];
+-	cFormulaFunctionGroup['TextAndData'].push(cDBCS);
+ 	cFormulaFunctionGroup['Statistical'] = cFormulaFunctionGroup['Statistical'] || [];
+ 	cFormulaFunctionGroup['Statistical'].push(cFORECAST_ETS, cFORECAST_ETS_CONFINT,
+ 		cFORECAST_ETS_SEASONALITY, cFORECAST_ETS_STAT);
+ 
+ 	cFormulaFunctionGroup['NotRealised'] = cFormulaFunctionGroup['NotRealised'] || [];
+-	cFormulaFunctionGroup['NotRealised'].push(cDBCS, cFORECAST_ETS,
++	cFormulaFunctionGroup['NotRealised'].push(cFORECAST_ETS,
+ 		cFORECAST_ETS_CONFINT, cFORECAST_ETS_SEASONALITY, cFORECAST_ETS_STAT);
+ 
+-	/**
+-	 * @constructor
+-	 * @extends {AscCommonExcel.cBaseFunction}
+-	 */
+-	function cDBCS() {
+-	}
+-
+-	cDBCS.prototype = Object.create(cBaseFunction.prototype);
+-	cDBCS.prototype.constructor = cDBCS;
+-	cDBCS.prototype.name = "DBCS";
+-	cDBCS.prototype.isXLFN = true;
+-
+ 	/**
+ 	 * @constructor
+ 	 * @extends {AscCommonExcel.cBaseFunction}
+diff --git a/cell/model/FormulaObjects/textanddataFunctions.js b/cell/model/FormulaObjects/textanddataFunctions.js
+index 58ccfa5..0570574 100644
+--- a/cell/model/FormulaObjects/textanddataFunctions.js
++++ b/cell/model/FormulaObjects/textanddataFunctions.js
+@@ -1551,7 +1551,9 @@ function (window, undefined) {
+ 
+ 	cJIS.prototype = Object.create(cBaseFunction.prototype);
+ 	cJIS.prototype.constructor = cJIS;
+-	cJIS.prototype.name = 'JIS';
++	// JIS is the Japanese name of DBCS (formula-lang/ja.json); Excel keeps DBCS
++	// in files, without _xlfn.
++	cJIS.prototype.name = 'DBCS';
+ 	cJIS.prototype.argumentsMin = 1;
+ 	cJIS.prototype.argumentsMax = 1;
+ 	cJIS.prototype.enabledToSingle = {"0": true};
+diff --git a/tests/cell/spreadsheet-calculation/FormulaTrace.js b/tests/cell/spreadsheet-calculation/FormulaTrace.js
+index 3ca62e5..e27852a 100644
+--- a/tests/cell/spreadsheet-calculation/FormulaTrace.js
++++ b/tests/cell/spreadsheet-calculation/FormulaTrace.js
+@@ -2197,7 +2197,7 @@ $(function() {
+ 			// this formulas doesn't exist in excel 2016
+ 			let versionExceptions = [
+ 				"FORECAST", "PHONETIC", "TEXTJOIN", "TEXTBEFORE", "TEXTAFTER", "TEXTSPLIT", "MAXIFS", 
+-				"MINIFS", "JIS", "RANDARRAY", "SEQUENCE", "CHOOSECOLS", "CHOOSEROWS", "DROP", "EXPAND", 
++				"MINIFS", "DBCS", "RANDARRAY", "SEQUENCE", "CHOOSECOLS", "CHOOSEROWS", "DROP", "EXPAND", 
+ 				"FILTER", "SORT", "TAKE", "UNIQUE", "XLOOKUP", "VSTACK", "HSTACK", "TOROW", "TOCOL", "WRAPROWS", "IFS", "SWITCH"
+ 			];
+ 			// this formulas different in behavior in arrayIndexes
+diff --git a/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js b/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js
+index 5d05206..aee4ed4 100644
+--- a/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js
++++ b/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js
+@@ -1152,11 +1152,11 @@ $(function () {
+ 			['ASC("ガパヴ　ー。「」、・＄１")', 'ｶﾞﾊﾟｳﾞ ｰ｡｢｣､･$1'],
+ 			['ASC("ひらがな漢字ヵヶ")', 'ひらがな漢字ヵヶ'],
+ 			['ASC("ｱｲｳ")', 'ｱｲｳ'],
+-			['JIS("ABC")', 'ＡＢＣ'],
+-			['JIS("ｴｸｾﾙ")', 'エクセル'],
+-			['JIS("ｶﾞﾊﾟｳﾞ ｰ｡｢｣､･$1")', 'ガパヴ　ー。「」、・＄１'],
+-			['JIS("あいう漢字")', 'あいう漢字'],
+-			['JIS("aﾞ")', 'ａ゛'],
++			['DBCS("ABC")', 'ＡＢＣ'],
++			['DBCS("ｴｸｾﾙ")', 'エクセル'],
++			['DBCS("ｶﾞﾊﾟｳﾞ ｰ｡｢｣､･$1")', 'ガパヴ　ー。「」、・＄１'],
++			['DBCS("あいう漢字")', 'あいう漢字'],
++			['DBCS("aﾞ")', 'ａ゛'],
+ 			['LENB("あいう")', 6],
+ 			['LENB("aｱあ")', 4],
+ 			['LENB("abc")', 3],
+-- 
+2.47.3
+
