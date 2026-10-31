@@ -348,8 +348,10 @@ Mac と Windows では、ほかに次の物が要ります。
   `~/Applications` に Euro-Office でない「Office (Euro-Office).app」があるときは、止まります。
 - Windows: 長いパスを扱えるように、リポジトリはドライブの近く(`C:\src\ja-office-fixes` など)に置いてください。
 
-Mac 版と Windows 版は、まだ実際の Mac と Windows で動かしていません。
-Windows の zip のエディターのファイルは、Linux 版と同じ大きさでした。手順は Linux で、Windows の場合をまねて確かめました。
+Windows 版は、Windows 11(x64、日本語)の仮想機械で確かめました。
+Git for Windows、Python 3.13、Node.js 24 を入れて `python3 build.py all --target euro-office` を実行し、最後まで通りました。
+パッチを当てたアプリで、禁則、日本語と英数字の間、表計算の関数が直っていることを画面で見ました。
+Mac 版は、まだ実際の Mac で動かしていません。
 
 ### 使う
 
@@ -399,7 +401,7 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 - 日本語と英数字の間の空きの量と、行末の扱いは、まだ Word と比べていません。
   今は、行末の字の後ろの空きも、行に収まるかどうかに数えます。
 - PHONETIC で、Excel で付けたふりがなを返すこと。ふりがなは変換器(core)で消えるので、sdkjs だけでは直せません。
-- Euro-Office の Mac 版と Windows 版を、実際の Mac と Windows で動かすこと。
+- Euro-Office の Mac 版を、実際の Mac で動かすこと。
 
 ## ライセンスと表示
 
@@ -509,7 +511,8 @@ them into the app:
   Keep the repository near the root of a drive (`C:\src\ja-office-fixes`), as some paths are long.
 
 An installed Euro-Office is not changed. `run`, `restore`, `install` and `unmenu` work with
-`--target euro-office` as well. The Mac and Windows steps have not been run on a real Mac or Windows yet.
+`--target euro-office` as well. The Windows steps ran through on Windows 11 (x64) with Git for Windows,
+Python 3.13 and Node.js 24; the Mac steps have not been run on a real Mac yet.
 
 The patches are the same as for ONLYOFFICE. Some comments next to the changes are in Russian in
 Euro-Office's sdkjs, so the patches are applied with `git am -C1`.

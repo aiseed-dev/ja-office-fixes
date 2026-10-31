@@ -109,7 +109,10 @@ commits in REFS are fixed, so the result is always the same.
   as all of them are built once, on Linux. On Windows the menu is a shortcut
   in the Start menu, which PowerShell makes, and the clones are made without
   core.autocrlf, so the patches find the lines as they are.
-* The Mac and Windows steps have not been run on a real Mac or Windows yet.
+* On Windows 11 (x64, in Japanese), `build.py all --target euro-office` ran
+  through with Git for Windows, Python 3.13 and Node.js 24, and the patched
+  app showed the patched line breaks and functions. The Mac steps have not
+  been run on a real Mac yet.
 """
 from __future__ import annotations
 
