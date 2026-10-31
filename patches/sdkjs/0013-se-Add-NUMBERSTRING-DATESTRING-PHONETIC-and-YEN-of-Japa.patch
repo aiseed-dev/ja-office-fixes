@@ -1,0 +1,253 @@
+From 42dcde2352532d3bb4a23e0cad9721869ea76ae3 Mon Sep 17 00:00:00 2001
+From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 07:15:45 +0900
+Subject: [PATCH] [se] Add NUMBERSTRING, DATESTRING, PHONETIC and YEN of
+ Japanese Excel
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Japanese Excel has four functions the editor did not know, so a
+workbook that used them showed #NAME?.
+
+NUMBERSTRING(number, type) rounds the number to a whole number and
+writes it in kanji as [DBNum1] (type 1), [DBNum2] (type 2) and
+[DBNum1] digits (type 3) show it. DATESTRING(date) writes the date in
+the Japanese era as the format gggee"年"mm"月"dd"日" shows it; a date
+in a string is read as DATEVALUE reads it. YEN(number, [decimals])
+is DOLLAR with the yen, no decimals by default and the minus before
+the yen, as the currency format of Windows in Japanese.
+
+PHONETIC(reference) gives the furigana of the cells. The editor does
+not keep furigana, so it gives the text of the cells, as Excel does
+for cells without furigana.
+---
+ .../FormulaObjects/textanddataFunctions.js    | 162 +++++++++++++++++-
+ .../formula-tests/textAndDataTests.js         |  29 ++++
+ 2 files changed, 190 insertions(+), 1 deletion(-)
+
+diff --git a/cell/model/FormulaObjects/textanddataFunctions.js b/cell/model/FormulaObjects/textanddataFunctions.js
+index 7e8a9d0..dfeb639 100644
+--- a/cell/model/FormulaObjects/textanddataFunctions.js
++++ b/cell/model/FormulaObjects/textanddataFunctions.js
+@@ -66,9 +66,11 @@ function (window, undefined) {
+ 		cEXACT, cFIND, cFINDB, cFIXED, cIMPORTRANGE, cJIS, cLEFT, cLEFTB, cLEN, cLENB, cLOWER, cMID, cMIDB, cNUMBERVALUE, cPHONETIC,
+ 		cPROPER, cREPLACE, cREPLACEB, cREPT, cRIGHT, cRIGHTB, cREGEXTEST, cREGEXEXTRACT, cREGEXREPLACE, cSEARCH, cSEARCHB, cSUBSTITUTE, cT, cTEXT, cTEXTJOIN,
+ 		cTRIM, cUNICHAR, cUNICODE, cUPPER, cVALUE, cTEXTBEFORE, cTEXTAFTER, cTEXTSPLIT);
++	// The functions of Japanese Excel
++	cFormulaFunctionGroup['TextAndData'].push(cDATESTRING, cNUMBERSTRING, cYEN);
+ 
+ 	cFormulaFunctionGroup['NotRealised'] = cFormulaFunctionGroup['NotRealised'] || [];
+-	cFormulaFunctionGroup['NotRealised'].push(cBAHTTEXT, cPHONETIC);
++	cFormulaFunctionGroup['NotRealised'].push(cBAHTTEXT);
+ 
+ 	const MAX_UNSIGNED_INT_16 = 65535;
+ 
+@@ -4065,6 +4067,164 @@ function (window, undefined) {
+ 		return res && res.isValidArray() ? res : new cError(cErrorType.not_available);
+ 	};
+ 
++	// The functions of Japanese Excel
++
++	// PHONETIC(reference): the furigana of the cells
++	cPHONETIC.prototype.argumentsMin = 1;
++	cPHONETIC.prototype.argumentsMax = 1;
++	cPHONETIC.prototype.arrayIndexes = {0: 1};
++	cPHONETIC.prototype.argumentsType = [argType.reference];
++	// The editor does not keep furigana, so this is the text of the cells, as
++	// Excel gives it for cells without furigana
++	cPHONETIC.prototype.Calculate = function (arg) {
++		let arg0 = arg[0];
++		if (arg0 instanceof cArea || arg0 instanceof cArea3D) {
++			let res = '', values = arg0.getValue();
++			for (let i = 0; i < values.length; i++) {
++				if (values[i] instanceof cError) {
++					return values[i];
++				}
++				if (values[i] instanceof cString) {
++					res += values[i].getValue();
++				}
++			}
++			return new cString(res);
++		}
++		if (arg0 instanceof cRef || arg0 instanceof cRef3D) {
++			arg0 = arg0.getValue();
++		}
++		if (arg0 instanceof cArray) {
++			arg0 = arg0.getElementRowCol(0, 0);
++		}
++		if (arg0 instanceof cError) {
++			return arg0;
++		}
++		return new cString(arg0 instanceof cString ? arg0.getValue() : '');
++	};
++
++	// A number or date as a format of the ja-JP locale shows it
++	function formatJa(format, number) {
++		return oNumFormatCache.get(format).format(number, CellValueType.Number, AscCommon.gc_nMaxDigCount)
++			.map(function (part) { return part.text; }).join('');
++	}
++
++	// The value of one argument as a cNumber or cError: a date in a string is
++	// its serial number, as in DATEVALUE
++	function toNumberJa(arg, cell, bDate) {
++		if (arg instanceof cArea || arg instanceof cArea3D) {
++			arg = arg.cross(cell);
++		} else if (arg instanceof cArray) {
++			arg = arg.getElementRowCol(0, 0);
++		}
++		if (arg instanceof cRef || arg instanceof cRef3D) {
++			arg = arg.getValue();
++		}
++		if (bDate && arg instanceof cString) {
++			let res = g_oFormatParser.parse(arg.getValue());
++			return res ? new cNumber(res.value) : new cError(cErrorType.wrong_value_type);
++		}
++		return arg.tocNumber();
++	}
++
++	// Round half away from zero
++	function roundJa(number, digits) {
++		let scale = Math.pow(10, digits);
++		return Math.sign(number) * Math.round(Math.abs(number) * scale) / scale;
++	}
++
++	/**
++	 * DATESTRING(date) of Japanese Excel: the date in the Japanese era
++	 * @constructor
++	 * @extends {AscCommonExcel.cBaseFunction}
++	 */
++	function cDATESTRING() {
++	}
++
++	cDATESTRING.prototype = Object.create(cBaseFunction.prototype);
++	cDATESTRING.prototype.constructor = cDATESTRING;
++	cDATESTRING.prototype.name = 'DATESTRING';
++	cDATESTRING.prototype.argumentsMin = 1;
++	cDATESTRING.prototype.argumentsMax = 1;
++	cDATESTRING.prototype.numFormat = AscCommonExcel.cNumFormatNone;
++	cDATESTRING.prototype.argumentsType = [argType.any];
++	cDATESTRING.prototype.Calculate = function (arg) {
++		let date = toNumberJa(arg[0], arguments[1], true);
++		if (date instanceof cError) {
++			return date;
++		}
++		if (date.getValue() < 0) {
++			return new cError(cErrorType.wrong_value_type);
++		}
++		return new cString(formatJa('[$-411]gggee"年"mm"月"dd"日"', Math.floor(date.getValue())));
++	};
++
++	// The formats of the types 1 to 3 of NUMBERSTRING
++	const NUMBERSTRING_FORMATS = ['[DBNum1][$-411]General', '[DBNum2][$-411]General', '[DBNum1][$-411]0'];
++
++	/**
++	 * NUMBERSTRING(number, type) of Japanese Excel: the number rounded to a
++	 * whole number in kanji
++	 * @constructor
++	 * @extends {AscCommonExcel.cBaseFunction}
++	 */
++	function cNUMBERSTRING() {
++	}
++
++	cNUMBERSTRING.prototype = Object.create(cBaseFunction.prototype);
++	cNUMBERSTRING.prototype.constructor = cNUMBERSTRING;
++	cNUMBERSTRING.prototype.name = 'NUMBERSTRING';
++	cNUMBERSTRING.prototype.argumentsMin = 2;
++	cNUMBERSTRING.prototype.argumentsMax = 2;
++	cNUMBERSTRING.prototype.numFormat = AscCommonExcel.cNumFormatNone;
++	cNUMBERSTRING.prototype.argumentsType = [argType.number, argType.number];
++	cNUMBERSTRING.prototype.Calculate = function (arg) {
++		let number = toNumberJa(arg[0], arguments[1]), type = toNumberJa(arg[1], arguments[1]);
++		if (number instanceof cError) {
++			return number;
++		}
++		if (type instanceof cError) {
++			return type;
++		}
++		let format = NUMBERSTRING_FORMATS[Math.floor(type.getValue()) - 1];
++		if (!format) {
++			return new cError(cErrorType.wrong_value_type);
++		}
++		return new cString(formatJa(format, roundJa(number.getValue(), 0)));
++	};
++
++	/**
++	 * YEN(number, [decimals]) of Japanese Excel: DOLLAR with the yen and no
++	 * decimals by default
++	 * @constructor
++	 * @extends {AscCommonExcel.cBaseFunction}
++	 */
++	function cYEN() {
++	}
++
++	cYEN.prototype = Object.create(cBaseFunction.prototype);
++	cYEN.prototype.constructor = cYEN;
++	cYEN.prototype.name = 'YEN';
++	cYEN.prototype.argumentsMin = 1;
++	cYEN.prototype.argumentsMax = 2;
++	cYEN.prototype.numFormat = AscCommonExcel.cNumFormatNone;
++	cYEN.prototype.argumentsType = [argType.number, argType.number];
++	cYEN.prototype.Calculate = function (arg) {
++		let number = toNumberJa(arg[0], arguments[1]), decimals = arg[1] ? toNumberJa(arg[1], arguments[1]) : new cNumber(0);
++		if (number instanceof cError) {
++			return number;
++		}
++		if (decimals instanceof cError) {
++			return decimals;
++		}
++		let digits = Math.trunc(decimals.getValue());
++		if (digits > 127) {
++			return new cError(cErrorType.wrong_value_type);
++		}
++		let zeros = digits > 0 ? '.' + '0'.repeat(digits) : '';
++		// The currency format of Windows in Japanese: -¥1,235
++		return new cString(formatJa('"¥"#,##0' + zeros + ';-"¥"#,##0' + zeros, roundJa(number.getValue(), digits)));
++	};
++
+ 	//----------------------------------------------------------export----------------------------------------------------
+ 	window['AscCommonExcel'] = window['AscCommonExcel'] || {};
+ 	window['AscCommonExcel'].cTEXT = cTEXT;
+diff --git a/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js b/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js
+index 383b8ce..e49e7b0 100644
+--- a/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js
++++ b/tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js
+@@ -1180,6 +1180,35 @@ $(function () {
+ 		}
+ 	});
+ 
++	QUnit.test("Test: Japanese NUMBERSTRING, DATESTRING, PHONETIC and YEN", function (assert) {
++		ws.getRange2("Z500").setValue("漢字");
++		ws.getRange2("Z501").setValue("123");
++		ws.getRange2("Z502").setValue("かな");
++		let cases = [
++			['NUMBERSTRING(123456789,1)', '一億二千三百四十五万六千七百八十九'],
++			['NUMBERSTRING(123456789,2)', '壱億弐阡参百四拾伍萬六阡七百八拾九'],
++			['NUMBERSTRING(123456789,3)', '一二三四五六七八九'],
++			['NUMBERSTRING(1050,1)', '千五十'],
++			['NUMBERSTRING(2.5,1)', '三'],
++			['NUMBERSTRING(1,4)', '#VALUE!'],
++			['DATESTRING(46301)', '令和08年10月06日'],
++			['DATESTRING("2019/4/30")', '平成31年04月30日'],
++			['DATESTRING("abc")', '#VALUE!'],
++			['YEN(1234.567)', '¥1,235'],
++			['YEN(1234.567,2)', '¥1,234.57'],
++			['YEN(1234.567,-2)', '¥1,200'],
++			['YEN(-1234.567)', '-¥1,235'],
++			['PHONETIC(Z500)', '漢字'],
++			['PHONETIC(Z501)', ''],
++			['PHONETIC(Z500:Z502)', '漢字かな'],
++		];
++		for (let i = 0; i < cases.length; i++) {
++			oParser = new parserFormula(cases[i][0], 'A2', ws);
++			assert.ok(oParser.parse(), 'Test: Formula ' + cases[i][0] + ' is parsed.');
++			assert.strictEqual(oParser.calculate().getValue(), cases[i][1], 'Test: ' + cases[i][0]);
++		}
++	});
++
+ 	QUnit.test("Test: \"CHAR\"", function (assert) {
+ 		// Data for reference link. Use A100-A111
+ 		ws.getRange2("A100").setValue("65");
+-- 
+2.47.3
+

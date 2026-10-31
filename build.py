@@ -12,8 +12,8 @@
     python3 build.py unmenu    # take it out of the menu and give the documents back
     python3 build.py all       # fetch, build, install and menu
 
-With --target euro-office, each command works on Euro-Office 9.3.6 (Linux
-only) instead, in work/euro-office/; see "Euro-Office" below.
+With --target euro-office, each command works on Euro-Office 9.3.6 (Linux,
+Mac or Windows) instead, in work/euro-office/; see "Euro-Office" below.
 
 Everything goes into work/ next to this file:
 
@@ -75,16 +75,22 @@ presentation editor is the official one.
 ## Euro-Office
 
 Euro-Office 9.3.6 is built from the commits its DesktopEditors tag v9.3.6
-names (EURO_REFS). Everything goes into work/euro-office/:
+names (REFS). Everything goes into work/euro-office/:
 
 * sdkjs, web-apps and sdkjs-forms at those commits, fetched with --depth 1,
   and the npm packages of the sdkjs and web-apps builds (about 115 MB)
-* desktop: the official package (euro-office-euro-office-9.3.6-0-x86_64.tar.xz,
-  about 500 MB) unpacked; the app is in desktop/opt/euro-office/euro-office
+* desktop: on Linux, the official package (euro-office-euro-office-9.3.6-0-x86_64.tar.xz,
+  about 500 MB) unpacked; the app is in desktop/opt/euro-office/euro-office.
+  On Windows, the official zip (Euro-Office-DesktopEditors-9.3.6-0-windows-x64.zip,
+  about 1 GB) unpacked into desktop/Euro-Office, the folder the installer makes.
+  On a Mac, the app of Euro-Office-DesktopEditors-9.3.6-0-macos-arm64.dmg (about
+  970 MB) goes into ~/Applications/Office (Euro-Office).app, as for ONLYOFFICE;
+  there is no Euro-Office for Intel Macs
 
-The sdkjs patches are in patches/euro-office/sdkjs: the same changes as in
-patches/sdkjs, made against Euro-Office's sdkjs, where some comments around
-them differ. The web-apps patches are the same for both.
+The patches are the same for both. Some comments next to the changes are in
+Russian in Euro-Office's sdkjs, where ONLYOFFICE has them in English, so git
+am may drop up to two lines of context at each end of a hunk (-C1); the
+commits in REFS are fixed, so the result is always the same.
 
 * sdkjs builds with webpack (npm run build in build/, configured by
   environment variables). The release's document editor has the forms addon
@@ -95,6 +101,11 @@ them differ. The web-apps patches are the same for both.
 * The app starts as its launcher (usr/bin/euro-office-euro-office) starts
   it: LD_LIBRARY_PATH with its folder and converter/, and libcef.so in
   LD_PRELOAD. The menu entry is ja-office-fixes-euro-office.desktop.
+* The editors in the Windows zip are the same files as in the Linux package,
+  as all of them are built once, on Linux. On Windows the menu is a shortcut
+  in the Start menu, which PowerShell makes, and the clones are made without
+  core.autocrlf, so the patches find the lines as they are.
+* The Mac and Windows steps have not been run on a real Mac or Windows yet.
 """
 from __future__ import annotations
 
@@ -108,6 +119,7 @@ import subprocess
 import sys
 import tarfile
 import urllib.request
+import zipfile
 
 def target_arg() -> str:
     """The value of --target (onlyoffice or euro-office)"""
@@ -124,8 +136,12 @@ if TARGET not in ("onlyoffice", "euro-office"):
     sys.exit(f"unknown target {TARGET}: use onlyoffice or euro-office")
 EURO = TARGET == "euro-office"
 MAC = sys.platform == "darwin"
-if EURO and MAC:
-    sys.exit("the euro-office target works on Linux only for now")
+WIN = sys.platform == "win32"
+ARM = platform.machine().lower() in ("arm64", "aarch64")
+if WIN and not EURO:
+    sys.exit("on Windows, only the euro-office target works: add --target euro-office")
+if EURO and MAC and not ARM:
+    sys.exit("Euro-Office has a Mac app for Apple silicon only")
 
 ROOT = pathlib.Path(__file__).resolve().parent
 if EURO:
@@ -135,7 +151,13 @@ if EURO:
     REFS = {"sdkjs": "40d9b7780f11a5cadc259f9b9815a364de8caa96",
             "web-apps": "ce0ba49545810a56a3878081ab762c6a7ae8dd4e",
             "sdkjs-forms": "5c2f5a010dae3581adda34d9bab20b1903c94081"}
-    PACKAGE_URL = f"{GITHUB}/DesktopEditors/releases/download/v{VERSION}/euro-office-euro-office-{VERSION}-0-x86_64.tar.xz"
+    RELEASE = f"{GITHUB}/DesktopEditors/releases/download/v{VERSION}"
+    if MAC:
+        PACKAGE_URL = f"{RELEASE}/Euro-Office-DesktopEditors-{VERSION}-0-macos-arm64.dmg"
+    elif WIN:
+        PACKAGE_URL = f"{RELEASE}/Euro-Office-DesktopEditors-{VERSION}-0-windows-{'arm64' if ARM else 'x64'}.zip"
+    else:
+        PACKAGE_URL = f"{RELEASE}/euro-office-euro-office-{VERSION}-0-{'aarch64' if ARM else 'x86_64'}.tar.xz"
     WORK = ROOT / "work/euro-office"
 else:
     # The desktop release and the sdkjs tag it was built from (the header of its
@@ -155,10 +177,14 @@ WEBAPPS = WORK / "web-apps"
 FORMS = WORK / "sdkjs-forms"
 PKG = WORK / "desktop"
 # The name of the patched app on a Mac
-APP_NAME = "Office"
+APP_NAME = "Office (Euro-Office)" if EURO else "Office"
 if MAC:
     APP = pathlib.Path.home() / "Applications" / f"{APP_NAME}.app"
     EDITORS = APP / "Contents/Resources/editors/sdkjs"
+elif WIN:
+    # The official zip holds the app's folder as it is installed
+    APP = PKG / "Euro-Office"
+    EDITORS = APP / "editors/sdkjs"
 elif EURO:
     APP = PKG / "opt/euro-office/euro-office"
     EDITORS = APP / "editors/sdkjs"
@@ -170,7 +196,7 @@ OWN_ENTRY = PKG / ("usr/share/applications/euro-office-euro-office.desktop" if E
                    else "usr/share/applications/onlyoffice-desktopeditors.desktop")
 # The editors the patches change
 PRODUCTS = ("word", "cell")
-PATCHES = ROOT / ("patches/euro-office/sdkjs" if EURO else "patches/sdkjs")
+PATCHES = ROOT / "patches/sdkjs"
 WEB_PATCHES = ROOT / "patches/web-apps"
 # The screen of the document editor, and the files of it the build changes
 WEB_EDITOR = EDITORS.parent / "web-apps/apps/documenteditor/main"
@@ -194,11 +220,16 @@ DOCUMENTS = [
 MENU = (pathlib.Path(os.environ.get("XDG_DATA_HOME") or pathlib.Path.home() / ".local/share")
         / ("applications/ja-office-fixes-euro-office.desktop" if EURO else "applications/ja-office-fixes.desktop"))
 # The bundle identifier of the official Mac app, kept by the copy
-MAC_BUNDLE_ID = "asc.onlyoffice.ONLYOFFICE"
+MAC_BUNDLE_ID = "asc.euro-office.Euro-Office" if EURO else "asc.onlyoffice.ONLYOFFICE"
+# The shortcut in the Start menu on Windows
+WIN_SHORTCUT = (pathlib.Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs"
+                / "ja-office-fixes (Euro-Office).lnk")
 
 
 def run(*cmd: str, cwd: pathlib.Path | None = None, env: dict[str, str] | None = None) -> None:
-    subprocess.run(list(cmd), cwd=cwd, check=True, env=dict(os.environ, **env) if env else None)
+    # On Windows, npm and npx are npm.cmd and npx.cmd, which only a full path finds
+    program = (shutil.which(cmd[0]) or cmd[0]) if WIN else cmd[0]
+    subprocess.run([program, *cmd[1:]], cwd=cwd, check=True, env=dict(os.environ, **env) if env else None)
 
 
 def fetch() -> None:
@@ -209,6 +240,8 @@ def fetch() -> None:
         if EURO:
             # A commit, not a tag: fetch just that one
             run("git", "init", "-q", str(repo))
+            # The patches need the files as they are, without CR LF from Git for Windows
+            run("git", "-C", str(repo), "config", "core.autocrlf", "false")
             run("git", "-C", str(repo), "remote", "add", "origin", f"{GITHUB}/{repo.name}")
             run("git", "-C", str(repo), "fetch", "--depth", "1", "origin", REFS[repo.name])
             run("git", "-C", str(repo), "-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD")
@@ -226,6 +259,9 @@ def fetch() -> None:
         PKG.mkdir(exist_ok=True)
         if MAC:
             copy_app(archive)
+        elif WIN:
+            with zipfile.ZipFile(archive) as z:
+                z.extractall(APP)
         else:
             with tarfile.open(archive) as t:
                 t.extractall(PKG, filter="tar")
@@ -309,7 +345,7 @@ def apply_patches(repo: pathlib.Path, patches: pathlib.Path) -> None:
     # git am needs an identity for the commits it makes in the local clone
     try:
         run("git", "-C", str(repo), "-c", "user.name=ja-office-fixes", "-c", "user.email=ja-office-fixes@localhost",
-            "am", "-q", "--3way", "--keep-cr", *files)
+            "am", "-q", "--3way", "--keep-cr", "-C1", *files)
     except subprocess.CalledProcessError:
         # Leave the clone as it was, so the next run starts again from the tag
         git(repo, "am", "--abort", check=False)
@@ -433,6 +469,10 @@ def start(files: list[str]) -> None:
         # By its path, so the official app, if there is one, is not started
         run("open", "-a", str(APP), *paths)
         return
+    if WIN:
+        subprocess.Popen([str(APP / "DesktopEditors.exe"), *paths], cwd=APP,
+                         creationflags=subprocess.DETACHED_PROCESS)
+        return
     env = dict(os.environ, **app_env())
     subprocess.Popen(["./DesktopEditors", *paths], cwd=APP, env=env, start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -458,6 +498,9 @@ def exec_arg(arg: str) -> str:
 def menu() -> None:
     if MAC:
         mac_menu()
+        return
+    if WIN:
+        win_menu()
         return
     # The app needs its own folder as the working folder (Path) and
     # LD_LIBRARY_PATH, as start() gives it. The icon is a generic one from
@@ -515,9 +558,24 @@ def mac_menu() -> None:
     print(f"choose {APP_NAME} under \"Open with\", and press \"Change All...\"")
 
 
+def win_menu() -> None:
+    """A shortcut in the Start menu, made by PowerShell; say how to open documents with it"""
+    script = ("$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK); "
+              "$s.TargetPath = $env:EXE; $s.WorkingDirectory = $env:DIR; $s.Save()")
+    run("powershell", "-NoProfile", "-Command", script,
+        env={"LNK": str(WIN_SHORTCUT), "EXE": str(APP / "DesktopEditors.exe"), "DIR": str(APP)})
+    print("added to the Start menu:", WIN_SHORTCUT.stem)
+    print("to open docx files with it on a double-click: right-click a docx, Open with > Choose another app,")
+    print(f"More apps > Look for another app on this PC, choose {APP / 'DesktopEditors.exe'}, and tick \"Always\"")
+
+
 def unmenu() -> None:
     if MAC:
         print(f"to remove {APP_NAME}, move {APP} to the Trash; work/ holds the rest")
+        return
+    if WIN:
+        WIN_SHORTCUT.unlink(missing_ok=True)
+        print("removed from the Start menu:", WIN_SHORTCUT.stem)
         return
     MENU.unlink(missing_ok=True)
     refresh_menu()

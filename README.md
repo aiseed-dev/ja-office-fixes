@@ -1,7 +1,7 @@
 # ja-office-fixes
 
 ONLYOFFICE と Euro-Office の文書エディターと表計算で、日本語の行の折り返し・縦書き・和暦・関数・漢数字を直すパッチです。
-今は ONLYOFFICE Desktop Editors 9.4.0 と、Euro-Office 9.3.6(Linux 版)に当てて使います。
+今は ONLYOFFICE Desktop Editors 9.4.0 と、Euro-Office 9.3.6(Linux 版、Mac 版、Windows 版)に当てて使います。
 ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは関係のない、独自の取り組みです。
 
 [English](#english)
@@ -57,11 +57,23 @@ ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは�
 | `LENB("あいう")` | 3 | 6 |
 | `LEFTB("あいう",2)` | あい | あ |
 | `VALUE("１２３")` | #VALUE! | 123 |
+| `NUMBERSTRING(1234,1)` | #NAME? | 千二百三十四 |
+| `NUMBERSTRING(1234,2)` | #NAME? | 壱阡弐百参拾四 |
+| `NUMBERSTRING(1234,3)` | #NAME? | 一二三四 |
+| `DATESTRING("2026/10/6")` | #NAME? | 令和08年10月06日 |
+| `YEN(1234.567)` | #NAME? | ¥1,235 |
+| `PHONETIC(A1)` | #NAME? | A1 の文字列 |
 
 - ASC と JIS は、英数字・記号・スペース・片仮名の全角と半角を変えます。濁点の付いた字は、全角の 1 字と半角の 2 字(ガ、ｶﾞ)で変わります。
 - LENB・LEFTB・RIGHTB・MIDB・REPLACEB・FINDB・SEARCHB は、日本語の文字コード(シフト JIS)のバイトで数えます。
   英数字と半角の片仮名は 1 バイト、ほかの字は 2 バイトです。2 バイトの字の途中で切れるときは、その半分をスペースにします。
 - VALUE は、全角の数字と記号も読みます。
+- NUMBERSTRING は、数を整数に丸めて漢数字にします。2 番目の引数の 1 は「千二百三十四」、2 は「壱阡弐百参拾四」、3 は「一二三四」です。
+  表示形式の `[DBNum1]` と `[DBNum2]` と同じ字を使います。
+- DATESTRING は、日付を「令和08年10月06日」の形の和暦にします。
+- YEN は、数を丸めて「¥1,235」の形にします。2 番目の引数は小数の桁数で、省くと 0 です。負の数は「-¥1,235」です。
+- PHONETIC は、セルのふりがなを返す関数です。ONLYOFFICE はふりがなを読み込まないので、セルの文字列をそのまま返します。
+  Excel も、ふりがなの無いセルでは文字列をそのまま返します。
 
 ### 漢数字(表計算)
 
@@ -291,8 +303,10 @@ docx をダブルクリックして開くようにするときは、Finder で d
 
 ## 使い方(Euro-Office)
 
-Euro-Office 9.3.6 の Linux 版にも、同じ `build.py` でパッチを当てます。
-命令の後ろに `--target euro-office` を付けます。今は Linux(x86_64)だけです。
+Euro-Office 9.3.6 にも、同じ `build.py` でパッチを当てます。
+命令の後ろに `--target euro-office` を付けます。
+Linux(x86_64 と arm64)、Mac(Apple シリコン)、Windows(x64 と arm64)で使えます。
+Euro-Office の Mac 版は、Apple シリコン用だけです。
 
 ### 組み立てる
 
@@ -304,27 +318,46 @@ python3 build.py all --target euro-office
 
 1. Euro-Office のエディターのプログラム(sdkjs)、画面のプログラム(web-apps)、フォームの部品(sdkjs-forms)を、
    Euro-Office 9.3.6 が使っている版で GitHub から取ってきます。
-2. 公式の Linux 版 Euro-Office 9.3.6(euro-office-euro-office-9.3.6-0-x86_64.tar.xz、約 500MB)を GitHub から取ってきて、展開します。
+2. 公式の Euro-Office 9.3.6 を GitHub から取ってきます。
+   - Linux: euro-office-euro-office-9.3.6-0-x86_64.tar.xz(約 500MB。arm64 は aarch64.tar.xz)を `work/euro-office/desktop/` に展開します。
+   - Mac: Euro-Office-DesktopEditors-9.3.6-0-macos-arm64.dmg(約 970MB)から、アプリを
+     `~/Applications/Office (Euro-Office).app` に写します。
+   - Windows: Euro-Office-DesktopEditors-9.3.6-0-windows-x64.zip(約 1GB。arm64 は windows-arm64.zip)を
+     `work\euro-office\desktop\Euro-Office\` に展開します。
 3. パッチを当てて、文書エディターと表計算のエディターと、文書エディターの画面を組み立てます。
    組み立てでは、npm の部品(約 115MB)を取ってきます。
-4. 展開した Linux 版のエディターと画面を、組み立てた物に入れ替えます。
-5. メニューに「ja-office-fixes (Euro-Office)」を足します(`~/.local/share/applications/ja-office-fixes-euro-office.desktop`)。
-   文書(docx・doc・odt・rtf)をダブルクリックしたときに開くアプリも、これにします。
+4. 2 のアプリのエディターと画面を、組み立てた物に入れ替えます。
+5. メニューに足します。
+   - Linux: メニューに「ja-office-fixes (Euro-Office)」を足します(`~/.local/share/applications/ja-office-fixes-euro-office.desktop`)。
+     文書(docx・doc・odt・rtf)をダブルクリックしたときに開くアプリも、これにします。
+   - Mac: アプリは「アプリケーション」(ホームのフォルダーの中)にあります。docx を開くアプリの変え方を表示します。
+   - Windows: スタートメニューに「ja-office-fixes (Euro-Office)」を足します。docx を開くアプリの変え方を表示します。
 
-取ってきた物は、すべて `work/euro-office/` に入ります(約 5.2GB)。ONLYOFFICE の物とは分かれています。
+取ってきた物は、すべて `work/euro-office/` に入ります(Linux で約 5.2GB)。ONLYOFFICE の物とは分かれています。
 インストール済みの Euro-Office は書き換えません。
+
+Mac と Windows では、ほかに次の物が要ります。
+
+- git(Windows は Git for Windows)、Python 3.12 以上、Node.js(`node`、`npm`、`npx`)
+- Mac: Mac の扱いは ONLYOFFICE と同じです([Mac での違い](#mac-での違い))。署名をし直し、検疫の印を外します。
+  `~/Applications` に Euro-Office でない「Office (Euro-Office).app」があるときは、止まります。
+- Windows: 長いパスを扱えるように、リポジトリはドライブの近く(`C:\src\ja-office-fixes` など)に置いてください。
+
+Mac 版と Windows 版は、まだ実際の Mac と Windows で動かしていません。
+Windows の zip のエディターのファイルは、Linux 版と同じ大きさでした。手順は Linux で、Windows の場合をまねて確かめました。
 
 ### 使う
 
-- 起動: メニューの「ja-office-fixes (Euro-Office)」か、`python3 build.py run --target euro-office 文書.docx`
+- 起動: メニューの「ja-office-fixes (Euro-Office)」(Mac は「Office (Euro-Office)」)か、`python3 build.py run --target euro-office 文書.docx`
 - 公式のエディターに戻す: `python3 build.py restore --target euro-office`
 - パッチを当てた物に戻す: `python3 build.py install --target euro-office`
 - メニューから外す: `python3 build.py unmenu --target euro-office`
 
 ### ONLYOFFICE との違い
 
-- パッチの中身は同じです。Euro-Office の sdkjs では周りのコメントが少し違うので、
-  Euro-Office 用のパッチを `patches/euro-office/sdkjs/` に置いています。web-apps のパッチは共通です。
+- パッチは共通です(`patches/sdkjs/` と `patches/web-apps/`)。
+  Euro-Office の sdkjs では、変える所の近くのコメントがロシア語のことがあります。
+  そこで `git am -C1` で当てます。前後の文脈が 1 行ずつ合えば当たります。
 - Euro-Office の sdkjs と web-apps は webpack で組み立てます。web-apps は文書エディターの画面だけを組み立てます。
 - 公式の文書エディターにはフォームの部品(sdkjs-forms)が入っているので、組み立てにも入れます。
 
@@ -335,6 +368,7 @@ python3 build.py all --target euro-office
   パッチを当てても、すべて通ります。足した日本語の試験は、パッチの前は落ち、後は通ります。
 
 - 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦、日本語の関数、漢数字の試験を足しました。
+  NUMBERSTRING、DATESTRING、YEN、PHONETIC の試験も足しました。この 4 つの答えは、まだ Excel で確かめていません。
   漢数字の試験の答えは、Mac の Excel に印刷させて確かめた値です。
 - テーマの書体の試験と、英数字の書体の置き換えの試験を足しました(`tests/word/styles/themeFonts.js`、`latinFonts.js`)。
 - Euro-Office 9.3.6 でも、同じ試験を回しました。結果は ONLYOFFICE と同じです。
@@ -358,9 +392,9 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 - 日本語と英数字の間の空きを切った段落(`w:autoSpaceDE="0"` など)。この設定は変換器(core)から sdkjs に渡らないので、
   切った段落も空きます。
 - 日本語と英数字の間の空きの量と、行末の扱いは、まだ Word と比べていません。
-- 表計算の NUMBERSTRING、DATESTRING、PHONETIC、YEN。まだ無い関数なので、`#NAME?` になります。
-- Euro-Office の Mac 版と Windows 版。
   今は、行末の字の後ろの空きも、行に収まるかどうかに数えます。
+- PHONETIC で、Excel で付けたふりがなを返すこと。ふりがなは変換器(core)で消えるので、sdkjs だけでは直せません。
+- Euro-Office の Mac 版と Windows 版を、実際の Mac と Windows で動かすこと。
 
 ## ライセンスと表示
 
@@ -409,6 +443,10 @@ line breaking, vertical writing, dates in the Japanese era, Japanese text functi
 - A quarter of the font size stands between kanji or kana and Latin letters or digits, as Word's
   `w:autoSpaceDE` and `w:autoSpaceDN` add space there; none next to spaces, punctuation or full-width forms.
   The setting does not reach sdkjs, so a paragraph that turns it off gets the space too.
+- NUMBERSTRING, DATESTRING, YEN and PHONETIC of Japanese Excel work (they gave #NAME?):
+  NUMBERSTRING(1234,1) = 千二百三十四 (2: 壱阡弐百参拾四, 3: 一二三四), DATESTRING("2026/10/6") = 令和08年10月06日,
+  YEN(1234.567) = ¥1,235. The converter drops furigana, so PHONETIC gives the text of the cells, as Excel does for
+  cells without furigana.
 
 ### Use (Linux)
 
@@ -443,21 +481,31 @@ the app they had; the presentation editor is the official one.
 
 ### Use (Euro-Office)
 
-Add `--target euro-office` to any command to work on Euro-Office 9.3.6 for Linux (x86_64) instead:
+Add `--target euro-office` to any command to work on Euro-Office 9.3.6 instead, on Linux (x86_64 and arm64),
+a Mac (Apple silicon) or Windows (x64 and arm64):
 
 ```bash
 python3 build.py all --target euro-office
 ```
 
 It fetches Euro-Office's sdkjs, web-apps and sdkjs-forms at the commits of the 9.3.6 release, the official
-package (euro-office-euro-office-9.3.6-0-x86_64.tar.xz, about 500 MB) and the npm packages of the builds
-(about 115 MB) into `work/euro-office/` (about 5.2 GB in all), patches and builds the document and spreadsheet
-editors and the document editor's screen, puts them into the unpacked package, and adds
-"ja-office-fixes (Euro-Office)" to the menu. An installed Euro-Office is not changed. `run`, `restore`,
-`install` and `unmenu` work with `--target euro-office` as well.
+package and the npm packages of the builds (about 115 MB) into `work/euro-office/` (about 5.2 GB in all on
+Linux), patches and builds the document and spreadsheet editors and the document editor's screen, and puts
+them into the app:
 
-The changes are the same as for ONLYOFFICE; the sdkjs patches for Euro-Office are in
-`patches/euro-office/sdkjs/`, as some comments around them differ there. The web-apps patch is shared.
+- Linux: euro-office-euro-office-9.3.6-0-x86_64.tar.xz (about 500 MB) is unpacked, and
+  "ja-office-fixes (Euro-Office)" is added to the menu.
+- Mac: the app of Euro-Office-DesktopEditors-9.3.6-0-macos-arm64.dmg (about 970 MB) is copied into
+  `~/Applications/Office (Euro-Office).app` and signed again, as for ONLYOFFICE.
+- Windows: Euro-Office-DesktopEditors-9.3.6-0-windows-x64.zip (about 1 GB) is unpacked into
+  `work\euro-office\desktop\Euro-Office\`, and "ja-office-fixes (Euro-Office)" is added to the Start menu.
+  Keep the repository near the root of a drive (`C:\src\ja-office-fixes`), as some paths are long.
+
+An installed Euro-Office is not changed. `run`, `restore`, `install` and `unmenu` work with
+`--target euro-office` as well. The Mac and Windows steps have not been run on a real Mac or Windows yet.
+
+The patches are the same as for ONLYOFFICE. Some comments next to the changes are in Russian in
+Euro-Office's sdkjs, so the patches are applied with `git am -C1`.
 
 ### Use (Mac)
 

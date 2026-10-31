@@ -1,4 +1,4 @@
-From e686d7a14b9684d917dedf716ad679d7ccbe282c Mon Sep 17 00:00:00 2001
+From 0f6cc2acf67fce88de19ff55b9a5931c79dbd36e Mon Sep 17 00:00:00 2001
 From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
 Date: Thu, 8 Oct 2026 00:34:10 +0900
 Subject: [PATCH] [se] Show dates in the Japanese era with the g, e and r
@@ -39,25 +39,18 @@ Assisted-by: ClaudeCode:claude-opus-5-5
  2 files changed, 138 insertions(+), 4 deletions(-)
 
 diff --git a/common/NumFormat.js b/common/NumFormat.js
-index a39f570..437b341 100644
+index a39f570..190144a 100644
 --- a/common/NumFormat.js
 +++ b/common/NumFormat.js
-@@ -71,6 +71,11 @@ var numFormat_AmPm = 19;
- var numFormat_DateSeparator = 20;
- var numFormat_TimeSeparator = 21;
- var numFormat_DecimalPointText = 22;
+@@ -206,6 +206,31 @@ function FormatObjDecimalFrac(aLeft, aRight)
+ 	this.numerator = 0;
+ 	this.denominator = 0;
+ }
 +// Japanese era (ECMA-376 Part 1, 18.8.31, International Considerations):
 +// g/gg/ggg is the era name, e/ee the year in the era; r is ee and rr gggee
 +var numFormat_Era = 23;
 +var numFormat_EraYear = 24;
 +var numFormat_EraR = 25;
- //Helper types that will be replaced in _prepareFormat
- var numFormat_MonthMinute = 101;
- var numFormat_Percent = 102;
-@@ -206,6 +211,26 @@ function FormatObjDecimalFrac(aLeft, aRight)
- 	this.numerator = 0;
- 	this.denominator = 0;
- }
 +// Start of each era in the Gregorian calendar, newest first
 +var g_aJapaneseEras = [
 +	{year: 2019, month: 5, day: 1, name: "令和", initial: "R"},
