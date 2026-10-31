@@ -1,0 +1,2 @@
+# The patches must keep their line ends as they are, also on Windows
+*.patch -text
