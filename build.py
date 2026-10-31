@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch, patch, build and start ONLYOFFICE Desktop Editors with the Japanese patches.
+"""Fetch, patch, build and start ONLYOFFICE Desktop Editors or Euro-Office with the Japanese patches.
 
     python3 build.py fetch     # get ONLYOFFICE sdkjs, web-apps and the desktop package (Linux or Mac)
     python3 build.py build     # apply patches/sdkjs/*.patch and patches/web-apps/*.patch to the
@@ -11,6 +11,9 @@
     python3 build.py menu      # add the patched app to the desktop menu, and open documents with it
     python3 build.py unmenu    # take it out of the menu and give the documents back
     python3 build.py all       # fetch, build, install and menu
+
+With --target euro-office, each command works on Euro-Office 9.3.6 (Linux
+only) instead, in work/euro-office/; see "Euro-Office" below.
 
 Everything goes into work/ next to this file:
 
@@ -65,10 +68,38 @@ presentation editor is the official one.
 * The app starts only from its own folder with LD_LIBRARY_PATH=./, as the
   ONLYOFFICE flatpak's launcher does. Without it, Qt cannot load its xcb
   plugin and the app stops at once.
+* The release merges the common strings into each editor's locale files,
+  which the build of the repository does not; install adds the patches'
+  strings to the release's files instead of replacing them.
+
+## Euro-Office
+
+Euro-Office 9.3.6 is built from the commits its DesktopEditors tag v9.3.6
+names (EURO_REFS). Everything goes into work/euro-office/:
+
+* sdkjs, web-apps and sdkjs-forms at those commits, fetched with --depth 1,
+  and the npm packages of the sdkjs and web-apps builds (about 115 MB)
+* desktop: the official package (euro-office-euro-office-9.3.6-0-x86_64.tar.xz,
+  about 500 MB) unpacked; the app is in desktop/opt/euro-office/euro-office
+
+The sdkjs patches are in patches/euro-office/sdkjs: the same changes as in
+patches/sdkjs, made against Euro-Office's sdkjs, where some comments around
+them differ. The web-apps patches are the same for both.
+
+* sdkjs builds with webpack (npm run build in build/, configured by
+  environment variables). The release's document editor has the forms addon
+  (sdkjs-forms) in it, so the build gets SDK_ADDONS too.
+* web-apps builds with webpack as well; only the document editor's webpack
+  config is run, not the whole pipeline (which builds every editor and the
+  mobile ones).
+* The app starts as its launcher (usr/bin/euro-office-euro-office) starts
+  it: LD_LIBRARY_PATH with its folder and converter/, and libcef.so in
+  LD_PRELOAD. The menu entry is ja-office-fixes-euro-office.desktop.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import pathlib
 import platform
@@ -78,33 +109,68 @@ import sys
 import tarfile
 import urllib.request
 
-# The desktop release and the sdkjs tag it was built from (the header of its
-# editors/sdkjs/word/sdk-all-min.js says "Version: 9.4.0 (build:129)")
-VERSION = "9.4.0"
-SDKJS_TAG = "v9.4.0.129"
+def target_arg() -> str:
+    """The value of --target (onlyoffice or euro-office)"""
+    for i, arg in enumerate(sys.argv):
+        if arg == "--target" and i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+        if arg.startswith("--target="):
+            return arg.split("=", 1)[1]
+    return "onlyoffice"
+
+
+TARGET = target_arg()
+if TARGET not in ("onlyoffice", "euro-office"):
+    sys.exit(f"unknown target {TARGET}: use onlyoffice or euro-office")
+EURO = TARGET == "euro-office"
 MAC = sys.platform == "darwin"
-RELEASE = f"https://github.com/ONLYOFFICE/DesktopEditors/releases/download/v{VERSION}"
-if MAC:
-    PACKAGE_URL = f"{RELEASE}/ONLYOFFICE-{'arm' if platform.machine() == 'arm64' else 'x86_64'}.dmg"
-else:
-    PACKAGE_URL = f"{RELEASE}/onlyoffice-desktopeditors-x64.tar.xz"
+if EURO and MAC:
+    sys.exit("the euro-office target works on Linux only for now")
 
 ROOT = pathlib.Path(__file__).resolve().parent
-WORK = ROOT / "work"
+if EURO:
+    # The desktop release and the commits its tag v9.3.6 names
+    VERSION = "9.3.6"
+    GITHUB = "https://github.com/Euro-Office"
+    REFS = {"sdkjs": "40d9b7780f11a5cadc259f9b9815a364de8caa96",
+            "web-apps": "ce0ba49545810a56a3878081ab762c6a7ae8dd4e",
+            "sdkjs-forms": "5c2f5a010dae3581adda34d9bab20b1903c94081"}
+    PACKAGE_URL = f"{GITHUB}/DesktopEditors/releases/download/v{VERSION}/euro-office-euro-office-{VERSION}-0-x86_64.tar.xz"
+    WORK = ROOT / "work/euro-office"
+else:
+    # The desktop release and the sdkjs tag it was built from (the header of its
+    # editors/sdkjs/word/sdk-all-min.js says "Version: 9.4.0 (build:129)")
+    VERSION = "9.4.0"
+    GITHUB = "https://github.com/ONLYOFFICE"
+    REFS = {"sdkjs": "v9.4.0.129", "web-apps": "v9.4.0.129"}
+    RELEASE = f"{GITHUB}/DesktopEditors/releases/download/v{VERSION}"
+    if MAC:
+        PACKAGE_URL = f"{RELEASE}/ONLYOFFICE-{'arm' if platform.machine() == 'arm64' else 'x86_64'}.dmg"
+    else:
+        PACKAGE_URL = f"{RELEASE}/onlyoffice-desktopeditors-x64.tar.xz"
+    WORK = ROOT / "work"
+
 SDKJS = WORK / "sdkjs"
 WEBAPPS = WORK / "web-apps"
+FORMS = WORK / "sdkjs-forms"
 PKG = WORK / "desktop"
 # The name of the patched app on a Mac
 APP_NAME = "Office"
 if MAC:
     APP = pathlib.Path.home() / "Applications" / f"{APP_NAME}.app"
     EDITORS = APP / "Contents/Resources/editors/sdkjs"
+elif EURO:
+    APP = PKG / "opt/euro-office/euro-office"
+    EDITORS = APP / "editors/sdkjs"
 else:
     APP = PKG / "opt/onlyoffice/desktopeditors"
     EDITORS = APP / "editors/sdkjs"
+# The package's own desktop entry
+OWN_ENTRY = PKG / ("usr/share/applications/euro-office-euro-office.desktop" if EURO
+                   else "usr/share/applications/onlyoffice-desktopeditors.desktop")
 # The editors the patches change
 PRODUCTS = ("word", "cell")
-PATCHES = ROOT / "patches/sdkjs"
+PATCHES = ROOT / ("patches/euro-office/sdkjs" if EURO else "patches/sdkjs")
 WEB_PATCHES = ROOT / "patches/web-apps"
 # The screen of the document editor, and the files of it the build changes
 WEB_EDITOR = EDITORS.parent / "web-apps/apps/documenteditor/main"
@@ -125,20 +191,29 @@ DOCUMENTS = [
     "application/vnd.oasis.opendocument.text-flat-xml",
     "application/rtf",
 ]
-MENU = pathlib.Path(os.environ.get("XDG_DATA_HOME") or pathlib.Path.home() / ".local/share") / "applications/ja-office-fixes.desktop"
+MENU = (pathlib.Path(os.environ.get("XDG_DATA_HOME") or pathlib.Path.home() / ".local/share")
+        / ("applications/ja-office-fixes-euro-office.desktop" if EURO else "applications/ja-office-fixes.desktop"))
 # The bundle identifier of the official Mac app, kept by the copy
 MAC_BUNDLE_ID = "asc.onlyoffice.ONLYOFFICE"
 
 
-def run(*cmd: str, cwd: pathlib.Path | None = None) -> None:
-    subprocess.run(list(cmd), cwd=cwd, check=True)
+def run(*cmd: str, cwd: pathlib.Path | None = None, env: dict[str, str] | None = None) -> None:
+    subprocess.run(list(cmd), cwd=cwd, check=True, env=dict(os.environ, **env) if env else None)
 
 
 def fetch() -> None:
-    WORK.mkdir(exist_ok=True)
-    for repo in (SDKJS, WEBAPPS):
-        if not repo.exists():
-            run("git", "clone", "--depth", "1", "--branch", SDKJS_TAG, f"https://github.com/ONLYOFFICE/{repo.name}", str(repo))
+    WORK.mkdir(parents=True, exist_ok=True)
+    for repo in (SDKJS, WEBAPPS, FORMS) if EURO else (SDKJS, WEBAPPS):
+        if repo.exists():
+            continue
+        if EURO:
+            # A commit, not a tag: fetch just that one
+            run("git", "init", "-q", str(repo))
+            run("git", "-C", str(repo), "remote", "add", "origin", f"{GITHUB}/{repo.name}")
+            run("git", "-C", str(repo), "fetch", "--depth", "1", "origin", REFS[repo.name])
+            run("git", "-C", str(repo), "-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD")
+        else:
+            run("git", "clone", "--depth", "1", "--branch", REFS[repo.name], f"{GITHUB}/{repo.name}", str(repo))
     if MAC:
         ours_or_exit()
     if not APP.exists():
@@ -202,19 +277,21 @@ def git(repo: pathlib.Path, *args: str, check: bool = True) -> subprocess.Comple
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=check)
 
 
-def patches_id(patches: pathlib.Path) -> str:
-    """What the branch is made of: the tag and every patch, name and content"""
-    h = hashlib.sha256(SDKJS_TAG.encode())
+def patches_id(patches: pathlib.Path, ref: str) -> str:
+    """What the branch is made of: the tag or commit and every patch, name and content"""
+    h = hashlib.sha256(ref.encode())
     for patch in sorted(patches.glob("*.patch")):
         h.update(patch.name.encode() + b"\0" + patch.read_bytes())
     return h.hexdigest()
 
 
 def apply_patches(repo: pathlib.Path, patches: pathlib.Path) -> None:
-    """Put the clone on BRANCH: the tag with the patches applied. The
-    patches_id() of the patches on BRANCH is kept inside the clone's .git"""
+    """Put the clone on BRANCH: the tag or commit in REFS with the patches
+    applied. The patches_id() of the patches on BRANCH is kept inside the
+    clone's .git"""
+    ref = REFS[repo.name]
     stamp = repo / ".git/ja-office-fixes-patches"
-    want = patches_id(patches)
+    want = patches_id(patches, ref)
     have = stamp.read_text().strip() if stamp.exists() else ""
     if git(repo, "branch", "--list", BRANCH).stdout.strip() and have == want:
         git(repo, "switch", "-q", BRANCH)
@@ -223,10 +300,10 @@ def apply_patches(repo: pathlib.Path, patches: pathlib.Path) -> None:
         sys.exit(f"{repo} has changes of its own; commit or drop them, then build again")
     if have:
         print(f"the patches or the tag of {repo.name} changed: applying them again")
-    if git(repo, "rev-parse", "-q", "--verify", f"refs/tags/{SDKJS_TAG}", check=False).returncode:
-        run("git", "-C", str(repo), "fetch", "--depth", "1", "origin", "tag", SDKJS_TAG)
+    if git(repo, "rev-parse", "-q", "--verify", f"{ref}^{{commit}}", check=False).returncode:
+        run("git", "-C", str(repo), "fetch", "--depth", "1", "origin", *(() if EURO else ("tag",)), ref)
     # The branch starts again from the official tag, whatever is checked out now
-    run("git", "-C", str(repo), "switch", "-q", "-C", BRANCH, SDKJS_TAG)
+    run("git", "-C", str(repo), "switch", "-q", "-C", BRANCH, ref)
     stamp.unlink(missing_ok=True)
     files = sorted(str(p) for p in patches.glob("*.patch"))
     # git am needs an identity for the commits it makes in the local clone
@@ -236,7 +313,7 @@ def apply_patches(repo: pathlib.Path, patches: pathlib.Path) -> None:
     except subprocess.CalledProcessError:
         # Leave the clone as it was, so the next run starts again from the tag
         git(repo, "am", "--abort", check=False)
-        git(repo, "switch", "-q", "--detach", SDKJS_TAG)
+        git(repo, "switch", "-q", "--detach", ref)
         git(repo, "branch", "-D", BRANCH)
         raise
     stamp.write_text(want + "\n")
@@ -260,6 +337,14 @@ def build_web_apps() -> None:
         sys.exit("the web-apps build needs Node.js: put node and npx on the PATH")
     apply_patches(WEBAPPS, WEB_PATCHES)
     tools = WEBAPPS / "build"
+    if EURO:
+        if not (tools / "node_modules").exists():
+            run("npm", "ci", "--no-audit", "--no-fund", "--omit=dev", cwd=tools)
+        # Only the document editor, into deploy/ as the whole pipeline puts it
+        run("npx", "webpack", "--config", "webpack.documenteditor.mjs", cwd=tools,
+            env={"BUILD_ROOT": str(WEBAPPS / "deploy"), "THEME": "euro-office", "PRODUCT_VERSION": VERSION})
+        print("built", WEB_DEPLOY)
+        return
     if not (tools / "node_modules").exists():
         # --omit=dev: the test packages download PhantomJS, which the build does not use
         run("npm", "install", "--no-audit", "--no-fund", "--omit=dev", cwd=tools)
@@ -274,8 +359,16 @@ def build_web_apps() -> None:
 
 def build() -> None:
     apply_patches(SDKJS, PATCHES)
-    products = [arg for name in PRODUCTS for arg in ("--product", name)]
-    run(sys.executable, "build.py", *products, "--desktop", cwd=SDKJS / "build")
+    if EURO:
+        tools = SDKJS / "build"
+        if not (tools / "node_modules").exists():
+            run("npm", "ci", "--no-audit", "--no-fund", cwd=tools)
+        # The release's document editor has the forms addon in it
+        run("npm", "run", "build", cwd=tools,
+            env={"SDK_PLATFORM": "desktop", "SDK_ADDONS": str(FORMS), "PRODUCT_VERSION": VERSION})
+    else:
+        products = [arg for name in PRODUCTS for arg in ("--product", name)]
+        run(sys.executable, "build.py", *products, "--desktop", cwd=SDKJS / "build")
     print("built", ", ".join(str(SDKJS / "deploy/sdkjs" / name) for name in PRODUCTS))
     build_web_apps()
 
@@ -304,7 +397,11 @@ def install() -> None:
         shutil.copytree(WEB_EDITOR / "locale", orig / "locale")
     for name in WEB_FILES:
         shutil.copy2(WEB_DEPLOY / name, WEB_EDITOR / name)
-    shutil.copytree(WEB_DEPLOY / "locale", WEB_EDITOR / "locale", dirs_exist_ok=True)
+    # The release's strings, with the build's on top (see the notes above)
+    for built in (WEB_DEPLOY / "locale").glob("*.json"):
+        strings = json.loads((orig / "locale" / built.name).read_text(encoding="utf-8")) if (orig / "locale" / built.name).exists() else {}
+        strings.update(json.loads(built.read_text(encoding="utf-8")))
+        (WEB_EDITOR / "locale" / built.name).write_text(json.dumps(strings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("installed the patched screen into", WEB_EDITOR)
     sign()
 
@@ -336,9 +433,16 @@ def start(files: list[str]) -> None:
         # By its path, so the official app, if there is one, is not started
         run("open", "-a", str(APP), *paths)
         return
-    env = dict(os.environ, LD_LIBRARY_PATH="./", QT_QPA_PLATFORM="xcb")
+    env = dict(os.environ, **app_env())
     subprocess.Popen(["./DesktopEditors", *paths], cwd=APP, env=env, start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def app_env() -> dict[str, str]:
+    """The environment the app needs (see the notes above)"""
+    if EURO:
+        return {"LD_LIBRARY_PATH": f"{APP}:{APP / 'converter'}", "LD_PRELOAD": str(APP / "libcef.so")}
+    return {"LD_LIBRARY_PATH": "./", "QT_QPA_PLATFORM": "xcb"}
 
 
 def exec_arg(arg: str) -> str:
@@ -359,21 +463,23 @@ def menu() -> None:
     # LD_LIBRARY_PATH, as start() gives it. The icon is a generic one from
     # the desktop theme: the ONLYOFFICE logo is a trademark of Ascensio
     # System SIA and is not used for a modified build.
+    product = "Euro-Office" if EURO else "ONLYOFFICE Desktop Editors"
+    env = dict(app_env(), LD_LIBRARY_PATH=str(APP)) if not EURO else app_env()
     entry = "\n".join([
         "[Desktop Entry]",
         "Type=Application",
-        "Name=ja-office-fixes",
+        "Name=ja-office-fixes (Euro-Office)" if EURO else "Name=ja-office-fixes",
         "GenericName=Office suite",
         "GenericName[ja]=オフィス",
-        "Comment=ONLYOFFICE Desktop Editors with the Japanese line-breaking and vertical-writing patches",
-        "Comment[ja]=日本語の行の折り返しと縦書きのパッチを当てた ONLYOFFICE Desktop Editors",
+        f"Comment={product} with the Japanese patches",
+        f"Comment[ja]=日本語のパッチを当てた {product}",
         f"Path={APP}",
-        f"Exec=env {exec_arg(f'LD_LIBRARY_PATH={APP}')} QT_QPA_PLATFORM=xcb {exec_arg(str(APP / 'DesktopEditors'))} %F",
+        f"Exec=env {' '.join(exec_arg(f'{k}={v}') for k, v in env.items())} {exec_arg(str(APP / 'DesktopEditors'))} %F",
         "Icon=x-office-document",
         "Terminal=false",
         "Categories=Office;WordProcessor;",
         f"MimeType={';'.join(mime_types())};",
-        "StartupWMClass=DesktopEditors",
+        "StartupWMClass=Euro-Office" if EURO else "StartupWMClass=DesktopEditors",
         "",
     ])
     MENU.parent.mkdir(parents=True, exist_ok=True)
@@ -389,8 +495,7 @@ def menu() -> None:
 
 def mime_types() -> list[str]:
     """The file types of the package's own desktop entry"""
-    own = PKG / "usr/share/applications/onlyoffice-desktopeditors.desktop"
-    for line in own.read_text().splitlines():
+    for line in OWN_ENTRY.read_text().splitlines():
         if line.startswith("MimeType="):
             # The entry opens files (%F), not oo-office: links
             return [t for t in line[9:].split(";") if t and not t.startswith("x-scheme-handler/")]
@@ -434,7 +539,16 @@ def unmenu() -> None:
 
 
 def main() -> int:
-    cmd, rest = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
+    # Without --target and its value (target_arg() read them)
+    args, skip = [], False
+    for arg in sys.argv[1:]:
+        if skip or arg.startswith("--target="):
+            skip = False
+        elif arg == "--target":
+            skip = True
+        else:
+            args.append(arg)
+    cmd, rest = (args[0], args[1:]) if args else ("", [])
     steps = {"fetch": [fetch], "build": [build], "install": [install], "restore": [restore],
              "menu": [menu], "unmenu": [unmenu], "all": [fetch, build, install, menu]}
     if cmd in steps:

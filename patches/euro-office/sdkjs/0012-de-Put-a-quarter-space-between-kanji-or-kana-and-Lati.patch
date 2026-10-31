@@ -1,0 +1,177 @@
+From e8d071383880383a052b9dd510be1d4c03a12d74 Mon Sep 17 00:00:00 2001
+From: Yasuhiro Niji <aiseed-dev@users.noreply.github.com>
+Date: Mon, 12 Oct 2026 16:16:56 +0900
+Subject: [PATCH] [de] Put a quarter space between kanji or kana and Latin
+ letters or digits
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Word adjusts the spacing between East Asian text and Latin letters
+(w:autoSpaceDE) and between East Asian text and digits (w:autoSpaceDN),
+ECMA-376 Part 1, 17.3.1.2 and 17.3.1.3. Both are on unless a style turns
+them off, so in Japanese documents a little space stands between 漢字
+and ABC or 123. There was none.
+
+After the paragraph is shaped, a quarter of the font size goes after a
+kanji or kana that a Latin letter or digit follows, and after a Latin
+letter or digit that a kanji or kana follows. There is none next to a
+space, punctuation or full-width forms. The space is part of the
+character's width; it is kept apart from the measured width, so that
+shaping a range again for a line break does not take it away.
+
+The binary has no such setting, so the space is there even where a
+paragraph turns it off. The quarter is the space of JIS X 4051; the
+spec leaves the amount to the application.
+
+Assisted-by: ClaudeCode:claude-opus-5-5
+---
+ .../paragraph/paragraph-lines.js              | 23 ++++++++++
+ word/Editor/Paragraph/RunContent/Text.js      | 19 +++++++-
+ word/Editor/Paragraph/TextShaper.js           | 45 +++++++++++++++++++
+ 3 files changed, 86 insertions(+), 1 deletion(-)
+
+diff --git a/tests/word/document-calculation/paragraph/paragraph-lines.js b/tests/word/document-calculation/paragraph/paragraph-lines.js
+index 7c4aca2..aa796f2 100644
+--- a/tests/word/document-calculation/paragraph/paragraph-lines.js
++++ b/tests/word/document-calculation/paragraph/paragraph-lines.js
+@@ -277,6 +277,29 @@ $(function () {
+ 		para.SetParagraphAlign(AscCommon.align_Left);
+ 	});
+ 	
++	QUnit.test("Test the space between kanji or kana and Latin letters or digits", function (assert)
++	{
++		// A quarter of the font size, after the first of the two characters
++		const space = AscTest.FontSize * 0.25 * AscCommonWord.g_dKoef_pt_to_mm;
++		const w = charWidth;
++		let cases = [
++			["漢A", [w + space, w]],
++			["Aかな1", [w + space, w, w + space, w]],
++			["カナ12漢", [w, w + space, w, w + space, w]],
++			// None next to a space, punctuation or full-width forms
++			["漢 A", [w, w, w]],
++			["「A」、", [w, w, w, w]],
++			["漢Ａ１", [w, w, w]]
++		];
++		for (let [text, widths] of cases)
++		{
++			setText(text);
++			recalculate(charWidth * 100);
++			for (let i = 0; i < widths.length; ++i)
++				assert.close(run.GetElement(i).GetWidth(), widths[i], 0.001, text + ": width of character " + i);
++		}
++	});
++
+ 	QUnit.test("Test: \"Test paragraph with very narrow width\"", function (assert)
+ 	{
+ 		assert.strictEqual(dc.GetElementsCount(), 1, "Paragraphs count");
+diff --git a/word/Editor/Paragraph/RunContent/Text.js b/word/Editor/Paragraph/RunContent/Text.js
+index 5b6fee3..cacbb45 100644
+--- a/word/Editor/Paragraph/RunContent/Text.js
++++ b/word/Editor/Paragraph/RunContent/Text.js
+@@ -295,6 +295,20 @@
+ 	CRunText.prototype.SetWidth = function(nWidth)
+ 	{
+ 		this.Width = ((nWidth * (((this.Flags >> 16) & 0xFFFF) / 64)) * AscWord.TEXTWIDTH_DIVIDER) | 0;
++		this.AutoSpace = 0;
++	};
++	// The space after the character that Word adds between East Asian text and
++	// Latin letters or digits (in mm). It is part of Width
++	CRunText.prototype.AutoSpace = 0;
++	CRunText.prototype.SetAutoSpace = function(nSpace)
++	{
++		let nW = (nSpace * AscWord.TEXTWIDTH_DIVIDER) | 0;
++		this.Width += nW - this.AutoSpace;
++		this.AutoSpace = nW;
++	};
++	CRunText.prototype.GetFontSize = function()
++	{
++		return ((this.Flags >> 16) & 0xFFFF) / 64;
+ 	};
+ 	CRunText.prototype.SetTemporaryWidth = function(nWidth)
+ 	{
+@@ -356,7 +370,7 @@
+ 	{
+ 		let nWidth = (this.Flags & FLAGS_TEMPORARY ?
+ 			this.TempWidth / AscWord.TEXTWIDTH_DIVIDER :
+-			this.Width / AscWord.TEXTWIDTH_DIVIDER);
++			(this.Width - this.AutoSpace) / AscWord.TEXTWIDTH_DIVIDER);
+ 
+ 		return (nWidth > 0 ? nWidth / (((this.Flags >> 16) & 0xFFFF) / 64) : 0);
+ 	};
+@@ -535,6 +549,9 @@
+ 		t.Flags    = this.Flags;
+ 		t.Grapheme = this.Grapheme;
+ 
++		if (this.AutoSpace)
++			t.AutoSpace = this.AutoSpace;
++
+ 		if (this.Flags & FLAGS_TEMPORARY)
+ 		{
+ 			t.TempWidth    = this.TempWidth;
+diff --git a/word/Editor/Paragraph/TextShaper.js b/word/Editor/Paragraph/TextShaper.js
+index 9a83d57..79d5b26 100644
+--- a/word/Editor/Paragraph/TextShaper.js
++++ b/word/Editor/Paragraph/TextShaper.js
+@@ -34,6 +34,50 @@
+ 		COMBINING_MARK    : 3
+ 	};
+ 
++	// Word puts a little space between kanji or kana and Latin letters or digits
++	// next to them (w:autoSpaceDE and w:autoSpaceDN, ECMA-376 Part 1, 17.3.1.2
++	// and 17.3.1.3). Both are on unless the document turns them off, and the
++	// converter does not pass them on, so the space is always there. It goes
++	// after the first of the two characters, in its font size
++	const AUTO_SPACE = 0.25; // of the font size
++
++	// 1 for kanji and kana, 2 for Latin letters and digits, 0 for the rest
++	function getAutoSpaceType(c)
++	{
++		if ((0x3041 <= c && c <= 0x30FF && 0x30A0 !== c && 0x30FB !== c)
++			|| 0x3005 === c
++			|| (0x3400 <= c && c <= 0x4DBF)
++			|| (0x4E00 <= c && c <= 0x9FFF)
++			|| (0xF900 <= c && c <= 0xFAFF)
++			|| (0x20000 <= c && c <= 0x3134F))
++			return 1;
++
++		if ((0x30 <= c && c <= 0x39)
++			|| (0x41 <= c && c <= 0x5A)
++			|| (0x61 <= c && c <= 0x7A)
++			|| (0xC0 <= c && c <= 0x24F && 0xD7 !== c && 0xF7 !== c))
++			return 2;
++
++		return 0;
++	}
++	function addAutoSpace(paragraph)
++	{
++		let prev = null, prevType = 0;
++		paragraph.CheckRunContent(function(run, startPos, endPos)
++		{
++			for (let pos = startPos; pos < endPos; ++pos)
++			{
++				let item = run.GetElement(pos);
++				let type = item.IsText() && !item.IsPdfText() ? getAutoSpaceType(item.GetCodePoint()) : 0;
++				if (type && prevType && type !== prevType)
++					prev.SetAutoSpace(AUTO_SPACE * prev.GetFontSize() * AscCommonWord.g_dKoef_pt_to_mm);
++
++				prev     = item;
++				prevType = type;
++			}
++		});
++	}
++
+ 	/**
+ 	 *
+ 	 * @constructor
+@@ -117,6 +161,7 @@
+ 			oThis.HandleRun(oRun, nStartPos, nEndPos);
+ 		});
+ 		this.FlushWord();
++		addAutoSpace(oParagraph);
+ 	};
+ 	CParagraphTextShaper.prototype.ShapeRange = function(oParagraph, oStart, oEnd, isTemporary)
+ 	{
+-- 
+2.47.3
+

@@ -1,7 +1,7 @@
 # ja-office-fixes
 
 ONLYOFFICE と Euro-Office の文書エディターと表計算で、日本語の行の折り返し・縦書き・和暦・関数・漢数字を直すパッチです。
-今は ONLYOFFICE Desktop Editors 9.4.0 に当てて使います。
+今は ONLYOFFICE Desktop Editors 9.4.0 と、Euro-Office 9.3.6(Linux 版)に当てて使います。
 ONLYOFFICE を元にしていますが、ONLYOFFICE(Ascensio System SIA)とは関係のない、独自の取り組みです。
 
 [English](#english)
@@ -229,7 +229,7 @@ python3 build.py unmenu
 ### 対象の版
 
 ONLYOFFICE Desktop Editors 9.4.0 です(sdkjs のタグ v9.4.0.129)。
-パッチは Euro-Office の sdkjs にもそのまま当たります。
+Euro-Office 9.3.6 の使い方は、[使い方(Euro-Office)](#使い方euro-office)にあります。
 
 ## 使い方(Mac)
 
@@ -289,6 +289,45 @@ docx をダブルクリックして開くようにするときは、Finder で d
 - `python3 build.py restore` で公式のエディターに戻り、`python3 build.py install` でパッチを当てた物に戻ります。
 - 使わなくなったときは、`~/Applications/Office.app` をゴミ箱に入れて、このリポジトリのフォルダーを消します。
 
+## 使い方(Euro-Office)
+
+Euro-Office 9.3.6 の Linux 版にも、同じ `build.py` でパッチを当てます。
+命令の後ろに `--target euro-office` を付けます。今は Linux(x86_64)だけです。
+
+### 組み立てる
+
+```bash
+python3 build.py all --target euro-office
+```
+
+このコマンドは、次のことを順に行います。
+
+1. Euro-Office のエディターのプログラム(sdkjs)、画面のプログラム(web-apps)、フォームの部品(sdkjs-forms)を、
+   Euro-Office 9.3.6 が使っている版で GitHub から取ってきます。
+2. 公式の Linux 版 Euro-Office 9.3.6(euro-office-euro-office-9.3.6-0-x86_64.tar.xz、約 500MB)を GitHub から取ってきて、展開します。
+3. パッチを当てて、文書エディターと表計算のエディターと、文書エディターの画面を組み立てます。
+   組み立てでは、npm の部品(約 115MB)を取ってきます。
+4. 展開した Linux 版のエディターと画面を、組み立てた物に入れ替えます。
+5. メニューに「ja-office-fixes (Euro-Office)」を足します(`~/.local/share/applications/ja-office-fixes-euro-office.desktop`)。
+   文書(docx・doc・odt・rtf)をダブルクリックしたときに開くアプリも、これにします。
+
+取ってきた物は、すべて `work/euro-office/` に入ります(約 5.2GB)。ONLYOFFICE の物とは分かれています。
+インストール済みの Euro-Office は書き換えません。
+
+### 使う
+
+- 起動: メニューの「ja-office-fixes (Euro-Office)」か、`python3 build.py run --target euro-office 文書.docx`
+- 公式のエディターに戻す: `python3 build.py restore --target euro-office`
+- パッチを当てた物に戻す: `python3 build.py install --target euro-office`
+- メニューから外す: `python3 build.py unmenu --target euro-office`
+
+### ONLYOFFICE との違い
+
+- パッチの中身は同じです。Euro-Office の sdkjs では周りのコメントが少し違うので、
+  Euro-Office 用のパッチを `patches/euro-office/sdkjs/` に置いています。web-apps のパッチは共通です。
+- Euro-Office の sdkjs と web-apps は webpack で組み立てます。web-apps は文書エディターの画面だけを組み立てます。
+- 公式の文書エディターにはフォームの部品(sdkjs-forms)が入っているので、組み立てにも入れます。
+
 ## 確かめ方
 
 - `tests/documents/` の docx と xlsx を、直す前と直した後の ONLYOFFICE で印刷して比べました(上の画像)。
@@ -298,6 +337,10 @@ docx をダブルクリックして開くようにするときは、Finder で d
 - 表計算の表示形式と文字列の関数の試験も、node で回せます。和暦、日本語の関数、漢数字の試験を足しました。
   漢数字の試験の答えは、Mac の Excel に印刷させて確かめた値です。
 - テーマの書体の試験と、英数字の書体の置き換えの試験を足しました(`tests/word/styles/themeFonts.js`、`latinFonts.js`)。
+- Euro-Office 9.3.6 でも、同じ試験を回しました。結果は ONLYOFFICE と同じです。
+  `SDKJS=work/euro-office/sdkjs` を付けると、Euro-Office の sdkjs で回ります。
+- Euro-Office 9.3.6 の Linux 版で、`tests/documents/` の文書を開き、直す前と後の画面を比べました。
+  折り返し、禁則、セルとテキストボックスの縦書き、和暦、日本語の関数、日本語と英数字の間は、直した後の形になりました。
 
 ```bash
 node tests/sdkjs_node/qunit.js work/sdkjs/tests/word/document-calculation/paragraph/paragraph-lines.js
@@ -315,6 +358,8 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 - 日本語と英数字の間の空きを切った段落(`w:autoSpaceDE="0"` など)。この設定は変換器(core)から sdkjs に渡らないので、
   切った段落も空きます。
 - 日本語と英数字の間の空きの量と、行末の扱いは、まだ Word と比べていません。
+- 表計算の NUMBERSTRING、DATESTRING、PHONETIC、YEN。まだ無い関数なので、`#NAME?` になります。
+- Euro-Office の Mac 版と Windows 版。
   今は、行末の字の後ろの空きも、行に収まるかどうかに数えます。
 
 ## ライセンスと表示
@@ -332,7 +377,7 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 
 ## English
 
-Patches for the document and spreadsheet editors of ONLYOFFICE Desktop Editors that fix Japanese
+Patches for the document and spreadsheet editors of ONLYOFFICE Desktop Editors 9.4.0 and Euro-Office 9.3.6 that fix Japanese
 line breaking, vertical writing, dates in the Japanese era, Japanese text functions, Japanese numerals and the Japanese theme fonts. Based on ONLYOFFICE; not affiliated with Ascensio System SIA.
 
 - Lines break between kana (they used to move to the next line as one word).
@@ -395,6 +440,24 @@ the app they had; the presentation editor is the official one.
 - To stop using it, run `python3 build.py unmenu`, which removes the menu entry and gives the
   documents back to the system's default app, then delete the folder.
 - The patched app is not updated automatically.
+
+### Use (Euro-Office)
+
+Add `--target euro-office` to any command to work on Euro-Office 9.3.6 for Linux (x86_64) instead:
+
+```bash
+python3 build.py all --target euro-office
+```
+
+It fetches Euro-Office's sdkjs, web-apps and sdkjs-forms at the commits of the 9.3.6 release, the official
+package (euro-office-euro-office-9.3.6-0-x86_64.tar.xz, about 500 MB) and the npm packages of the builds
+(about 115 MB) into `work/euro-office/` (about 5.2 GB in all), patches and builds the document and spreadsheet
+editors and the document editor's screen, puts them into the unpacked package, and adds
+"ja-office-fixes (Euro-Office)" to the menu. An installed Euro-Office is not changed. `run`, `restore`,
+`install` and `unmenu` work with `--target euro-office` as well.
+
+The changes are the same as for ONLYOFFICE; the sdkjs patches for Euro-Office are in
+`patches/euro-office/sdkjs/`, as some comments around them differ there. The web-apps patch is shared.
 
 ### Use (Mac)
 
