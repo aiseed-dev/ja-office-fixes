@@ -314,11 +314,15 @@ docx をダブルクリックして開くようにするときは、Finder で d
 
 | ファイル | 使う所 |
 |---|---|
-| `ja-office-fixes-euro-office-9.3.6-linux-x86_64.tar.xz`(`-linux-aarch64`) | Linux |
+| `ja-office-fixes-euro-office_9.3.6-0+ja<日付>_amd64.deb`(`_arm64.deb`) | Ubuntu、Debian |
+| `ja-office-fixes-euro-office-9.3.6-linux-x86_64.tar.xz`(`-linux-aarch64`) | ほかの Linux |
 | `ja-office-fixes-euro-office-9.3.6-windows-x64.zip`(`-windows-arm64`) | Windows |
 | `ja-office-fixes-euro-office-9.3.6-macos-arm64.zip` | Mac(Apple シリコン) |
 
-- Linux: 展開したフォルダーの `ja-office-fixes` を実行します。
+- Ubuntu、Debian: `sudo apt install ./ja-office-fixes-euro-office_*.deb` で入れます。メニューに Euro-Office が出て、
+  文書をダブルクリックで開けます。公式の Euro-Office の .deb と同じ場所に入るので、公式の版と入れ替わります。
+  公式の版に戻すときは、公式の .deb を入れ直します。
+- ほかの Linux: tar.xz を展開したフォルダーの `ja-office-fixes` を実行します。
 - Windows: 展開したフォルダーの `DesktopEditors.exe` を実行します。
 - Mac: 展開した「Office (Euro-Office).app」を「アプリケーション」に入れます。この Mac 用の署名ではないので、
   初めの 1 回は、ターミナルで `xattr -dr com.apple.quarantine "/Applications/Office (Euro-Office).app"` を実行してから開きます。
@@ -514,8 +518,9 @@ the app they had; the presentation editor is the official one.
 
 Euro-Office 9.3.6 with the patches can be downloaded from the
 [Releases](https://github.com/aiseed-dev/ja-office-fixes/releases) of this repository, built from the official
-release by GitHub Actions (`.github/workflows/euro-office-release.yml`): a `.tar.xz` for Linux (run
-`ja-office-fixes` in the folder), a `.zip` for Windows (run `DesktopEditors.exe`) and a `.zip` for a Mac with Apple
+release by GitHub Actions (`.github/workflows/euro-office-release.yml`): a `.deb` for Ubuntu and Debian
+(`sudo apt install ./ja-office-fixes-euro-office_*.deb`; it takes the place of the official Euro-Office package), a
+`.tar.xz` for other Linux (run `ja-office-fixes` in the folder), a `.zip` for Windows (run `DesktopEditors.exe`) and a `.zip` for a Mac with Apple
 silicon (move "Office (Euro-Office).app" to Applications and run
 `xattr -dr com.apple.quarantine "/Applications/Office (Euro-Office).app"` once). They are not official
 Euro-Office builds; JA-OFFICE-FIXES.txt in each says what was changed and where the source is. Modified

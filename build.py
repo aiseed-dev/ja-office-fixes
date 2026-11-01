@@ -122,11 +122,15 @@ commits in REFS are fixed, so the result is always the same.
 package packs the installed Euro-Office into dist/ for download:
 ja-office-fixes-euro-office-9.3.6-<platform>.tar.xz on Linux (with a
 launcher, ja-office-fixes, as the package's usr/bin one), .zip on Windows and
-a zip of the app on a Mac (signed again ad hoc, as for install). Each has
-JA-OFFICE-FIXES.txt in it: that the build is modified and when, what changed,
-and where the source is (AGPL-3.0, sections 5 a and 6). Euro-Office's code
-has no terms beyond the AGPL; ONLYOFFICE's ask to keep its logo and give no
-right to its name, so package refuses the onlyoffice target.
+a zip of the app on a Mac (signed again ad hoc, as for install). On Linux it
+also makes ja-office-fixes-euro-office_9.3.6-0+ja<date>_<arch>.deb: the
+official deb with the files install changes put in, and its control renamed
+to conflict with and replace the official package (the same paths, so its
+launcher, menu entry and file types stay). Each has JA-OFFICE-FIXES.txt in
+it: that the build is modified and when, what changed, and where the source
+is (AGPL-3.0, sections 5 a and 6). Euro-Office's code has no terms beyond the
+AGPL; ONLYOFFICE's ask to keep its logo and give no right to its name, so
+package refuses the onlyoffice target.
 .github/workflows/euro-office-release.yml runs it on GitHub's machines for a
 tag euro-office-* and puts the files on a draft release of the tag.
 """
@@ -272,6 +276,8 @@ License: GNU AGPL v3.0 (LICENSE.txt).
 日本語のパッチ(ja-office-fixes)を当てた Euro-Office {version} です。
 {date} に手を入れた版で、Euro-Office の公式の版ではありません。
 """
+# The name of the deb on Linux
+DEB_NAME = "ja-office-fixes-euro-office"
 # The shortcut in the Start menu on Windows
 WIN_SHORTCUT = (pathlib.Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs"
                 / "ja-office-fixes (Euro-Office).lnk")
@@ -301,12 +307,7 @@ def fetch() -> None:
     if MAC:
         ours_or_exit()
     if not APP.exists():
-        archive = WORK / PACKAGE_URL.rsplit("/", 1)[1]
-        if not archive.exists():
-            print("downloading", PACKAGE_URL)
-            part = archive.with_suffix(archive.suffix + ".part")
-            urllib.request.urlretrieve(PACKAGE_URL, part)
-            part.rename(archive)
+        archive = download(PACKAGE_URL)
         PKG.mkdir(exist_ok=True)
         if MAC:
             copy_app(archive)
@@ -317,6 +318,17 @@ def fetch() -> None:
             with tarfile.open(archive) as t:
                 t.extractall(PKG, filter="tar")
     print("fetched", SDKJS, WEBAPPS, "and", APP)
+
+
+def download(url: str) -> pathlib.Path:
+    """A release file in WORK, downloaded once"""
+    archive = WORK / url.rsplit("/", 1)[1]
+    if not archive.exists():
+        print("downloading", url)
+        part = archive.with_suffix(archive.suffix + ".part")
+        urllib.request.urlretrieve(url, part)
+        part.rename(archive)
+    return archive
 
 
 def copy_app(dmg: pathlib.Path) -> None:
@@ -656,8 +668,62 @@ def package() -> None:
         launcher.chmod(0o755)
         out = DIST / f"{name}.tar.xz"
         run("tar", "-C", str(APP.parent), f"--transform=s,^{APP.name},{name},", "-cJf", str(out), APP.name,
-            env={"XZ_OPT": "-6 -T0"})
+            env={"XZ_OPT": "-9 -T0"})
+        print("packed", out)
+        out = deb()
     print("packed", out)
+
+
+def deb() -> pathlib.Path:
+    """The official deb with the files install changed, under a name of its own
+    (see "Downloads" above)"""
+    if not shutil.which("dpkg-deb"):
+        sys.exit("making the deb needs dpkg-deb (Debian and Ubuntu have it)")
+    arch = "arm64" if ARM else "amd64"
+    official = download(f"{RELEASE}/euro-office-euro-office_{VERSION}-0_{arch}.deb")
+    tree = WORK / "deb"
+    shutil.rmtree(tree, ignore_errors=True)
+    run("dpkg-deb", "-R", str(official), str(tree))
+    opt = tree / APP.relative_to(PKG)
+    changed = [EDITORS / name / script for name in PRODUCTS for script in ("sdk-all-min.js", "sdk-all.js")]
+    changed += [WEB_EDITOR / name for name in WEB_FILES] + sorted((WEB_EDITOR / "locale").glob("*.json"))
+    changed += [FORMULA_NAMES, APP / "JA-OFFICE-FIXES.txt"]
+    for f in changed:
+        shutil.copy2(f, opt / f.relative_to(APP))
+    for name in PRODUCTS:
+        for cache in ("sdk-all.bin", "sdk-all.cache"):
+            (opt / EDITORS.relative_to(APP) / name / cache).unlink(missing_ok=True)
+    # The sums dpkg --verify checks, and the size apt shows
+    sums, size = [], 0
+    for f in sorted(tree.rglob("*")):
+        if f.is_file() and not f.is_symlink() and "DEBIAN" not in f.relative_to(tree).parts:
+            sums.append(f"{hashlib.md5(f.read_bytes()).hexdigest()}  {f.relative_to(tree).as_posix()}")
+            size += f.stat().st_size
+    (tree / "DEBIAN/md5sums").write_text("\n".join(sums) + "\n")
+    # Our own name, in place of the official package, which it replaces
+    version = f"{VERSION}-0+ja{time.strftime('%Y%m%d')}"
+    fields = {"Package": DEB_NAME, "Version": version,
+              "Maintainer": "ja-office-fixes <aiseed-dev@users.noreply.github.com>",
+              "Installed-Size": str(size // 1024),
+              "Conflicts": "euro-office-euro-office, euro-office-euro-office-enterprise",
+              "Replaces": "euro-office-euro-office",
+              "Homepage": "https://github.com/aiseed-dev/ja-office-fixes"}
+    lines = []
+    for line in (tree / "DEBIAN/control").read_text().splitlines():
+        key = line.split(":", 1)[0]
+        if key in fields:
+            line = f"{key}: {fields.pop(key)}"
+        elif key == "Description":
+            line = f"Description: Euro-Office {VERSION} with the Japanese patches of ja-office-fixes (unofficial)"
+        lines.append(line)
+    at = next(i for i, line in enumerate(lines) if line.startswith("Description:"))
+    lines[at:at] = [f"{key}: {value}" for key, value in fields.items()]
+    (tree / "DEBIAN/control").write_text("\n".join(lines) + "\n")
+    DIST.mkdir(exist_ok=True)
+    out = DIST / f"{DEB_NAME}_{version}_{arch}.deb"
+    run("dpkg-deb", "--root-owner-group", "-Zxz", "-z9", "-b", str(tree), str(out))
+    shutil.rmtree(tree)
+    return out
 
 
 # The launcher in the Linux download, after usr/bin/euro-office-euro-office
