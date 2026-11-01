@@ -11,6 +11,9 @@
     python3 build.py menu      # add the patched app to the desktop menu, and open documents with it
     python3 build.py unmenu    # take it out of the menu and give the documents back
     python3 build.py all       # fetch, build, install and menu
+    python3 build.py package --target euro-office
+                               # pack the installed app for download into dist/
+                               # (see "Downloads" below)
 
 With --target euro-office, each command works on Euro-Office 9.3.6 (Linux,
 Mac or Windows) instead, in work/euro-office/; see "Euro-Office" below.
@@ -113,6 +116,19 @@ commits in REFS are fixed, so the result is always the same.
   through with Git for Windows, Python 3.13 and Node.js 24, and the patched
   app showed the patched line breaks and functions. The Mac steps have not
   been run on a real Mac yet.
+
+## Downloads
+
+package packs the installed Euro-Office into dist/ for download:
+ja-office-fixes-euro-office-9.3.6-<platform>.tar.xz on Linux (with a
+launcher, ja-office-fixes, as the package's usr/bin one), .zip on Windows and
+a zip of the app on a Mac (signed again ad hoc, as for install). Each has
+JA-OFFICE-FIXES.txt in it: that the build is modified and when, what changed,
+and where the source is (AGPL-3.0, sections 5 a and 6). Euro-Office's code
+has no terms beyond the AGPL; ONLYOFFICE's ask to keep its logo and give no
+right to its name, so package refuses the onlyoffice target.
+.github/workflows/euro-office-release.yml runs it on GitHub's machines for a
+tag euro-office-* and puts the files on a draft release of the tag.
 """
 from __future__ import annotations
 
@@ -125,6 +141,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import urllib.request
 import zipfile
 
@@ -230,6 +247,31 @@ MENU = (pathlib.Path(os.environ.get("XDG_DATA_HOME") or pathlib.Path.home() / ".
         / ("applications/ja-office-fixes-euro-office.desktop" if EURO else "applications/ja-office-fixes.desktop"))
 # The bundle identifier of the official Mac app, kept by the copy
 MAC_BUNDLE_ID = "asc.euro-office.Euro-Office" if EURO else "asc.onlyoffice.ONLYOFFICE"
+# What the downloads are called, and where package puts them
+PLATFORM = ("macos-arm64" if MAC else f"windows-{'arm64' if ARM else 'x64'}" if WIN
+            else f"linux-{'aarch64' if ARM else 'x86_64'}")
+DIST = ROOT / "dist"
+# The notice package puts into the app (AGPL-3.0, sections 5 a and 6)
+PACKAGE_NOTICE = """This is Euro-Office {version} with the Japanese patches of ja-office-fixes.
+It is a modified version of Euro-Office, made on {date}. It is not an official
+Euro-Office build.
+
+Changed: the document and spreadsheet editors (editors/sdkjs/word and cell),
+the document editor's screen (editors/web-apps/apps/documenteditor/main) and
+the Japanese function names of the spreadsheet editor
+(editors/web-apps/apps/spreadsheeteditor/main/resources/formula-lang/ja.json).
+Everything else is the official release:
+{release}
+
+Source of the changes: https://github.com/aiseed-dev/ja-office-fixes
+(commit {commit}, patches/sdkjs and patches/web-apps), applied to Euro-Office
+sdkjs {sdkjs}, web-apps {webapps} and sdkjs-forms {forms}.
+The source of the rest is at https://github.com/Euro-Office.
+License: GNU AGPL v3.0 (LICENSE.txt).
+
+日本語のパッチ(ja-office-fixes)を当てた Euro-Office {version} です。
+{date} に手を入れた版で、Euro-Office の公式の版ではありません。
+"""
 # The shortcut in the Start menu on Windows
 WIN_SHORTCUT = (pathlib.Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs"
                 / "ja-office-fixes (Euro-Office).lnk")
@@ -581,6 +623,53 @@ def mac_menu() -> None:
     print(f"choose {APP_NAME} under \"Open with\", and press \"Change All...\"")
 
 
+def package() -> None:
+    """Pack the installed app into dist/ for download, with a notice of the
+    changes (see "Downloads" above)"""
+    if not EURO:
+        sys.exit("package works with --target euro-office only: ONLYOFFICE's terms ask to keep its logo and "
+                 "give no right to its name, so modified ONLYOFFICE builds are not passed on")
+    if MAC:
+        ours_or_exit()
+    commit = git(ROOT, "rev-parse", "HEAD", check=False).stdout.strip() or "unknown"
+    notice = PACKAGE_NOTICE.format(
+        version=VERSION, date=time.strftime("%Y-%m-%d"), commit=commit,
+        release=f"https://github.com/Euro-Office/DesktopEditors/releases/tag/v{VERSION}",
+        sdkjs=REFS["sdkjs"], webapps=REFS["web-apps"], forms=REFS["sdkjs-forms"])
+    files = APP / "Contents/Resources" if MAC else APP
+    (files / "JA-OFFICE-FIXES.txt").write_text(notice, encoding="utf-8", newline="\r\n" if WIN else None)
+    name = f"ja-office-fixes-euro-office-{VERSION}-{PLATFORM}"
+    DIST.mkdir(exist_ok=True)
+    if MAC:
+        sign()
+        out = DIST / f"{name}.zip"
+        run("ditto", "-c", "-k", "--keepParent", str(APP), str(out))
+    elif WIN:
+        out = DIST / f"{name}.zip"
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in sorted(APP.rglob("*")):
+                z.write(f, pathlib.Path(name) / f.relative_to(APP))
+    else:
+        # Started from anywhere, as the package's own launcher starts it
+        launcher = APP / "ja-office-fixes"
+        launcher.write_text(LAUNCHER)
+        launcher.chmod(0o755)
+        out = DIST / f"{name}.tar.xz"
+        run("tar", "-C", str(APP.parent), f"--transform=s,^{APP.name},{name},", "-cJf", str(out), APP.name,
+            env={"XZ_OPT": "-6 -T0"})
+    print("packed", out)
+
+
+# The launcher in the Linux download, after usr/bin/euro-office-euro-office
+LAUNCHER = """#!/bin/sh
+# Start the patched Euro-Office in this folder (ja-office-fixes)
+APP_PATH=$(dirname "$(readlink -f "$0")")
+export LD_LIBRARY_PATH=$APP_PATH:$APP_PATH/converter${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export LD_PRELOAD=$APP_PATH/libcef.so
+exec "$APP_PATH/DesktopEditors" "$@"
+"""
+
+
 def win_menu() -> None:
     """A shortcut in the Start menu, made by PowerShell; say how to open documents with it"""
     script = ("$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK); "
@@ -631,7 +720,7 @@ def main() -> int:
             args.append(arg)
     cmd, rest = (args[0], args[1:]) if args else ("", [])
     steps = {"fetch": [fetch], "build": [build], "install": [install], "restore": [restore],
-             "menu": [menu], "unmenu": [unmenu], "all": [fetch, build, install, menu]}
+             "menu": [menu], "unmenu": [unmenu], "package": [package], "all": [fetch, build, install, menu]}
     if cmd in steps:
         for step in steps[cmd]:
             step()

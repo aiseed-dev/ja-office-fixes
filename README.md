@@ -306,6 +306,26 @@ docx をダブルクリックして開くようにするときは、Finder で d
 - `python3 build.py restore` で公式のエディターに戻り、`python3 build.py install` でパッチを当てた物に戻ります。
 - 使わなくなったときは、`~/Applications/Office.app` をゴミ箱に入れて、このリポジトリのフォルダーを消します。
 
+## ダウンロード(Euro-Office)
+
+パッチを当てた Euro-Office 9.3.6 は、このリポジトリの [Releases](https://github.com/aiseed-dev/ja-office-fixes/releases) から
+ダウンロードできます。組み立ては要りません。GitHub Actions(`.github/workflows/euro-office-release.yml`)が、
+公式の版にパッチを当てて作ります。
+
+| ファイル | 使う所 |
+|---|---|
+| `ja-office-fixes-euro-office-9.3.6-linux-x86_64.tar.xz`(`-linux-aarch64`) | Linux |
+| `ja-office-fixes-euro-office-9.3.6-windows-x64.zip`(`-windows-arm64`) | Windows |
+| `ja-office-fixes-euro-office-9.3.6-macos-arm64.zip` | Mac(Apple シリコン) |
+
+- Linux: 展開したフォルダーの `ja-office-fixes` を実行します。
+- Windows: 展開したフォルダーの `DesktopEditors.exe` を実行します。
+- Mac: 展開した「Office (Euro-Office).app」を「アプリケーション」に入れます。この Mac 用の署名ではないので、
+  初めの 1 回は、ターミナルで `xattr -dr com.apple.quarantine "/Applications/Office (Euro-Office).app"` を実行してから開きます。
+
+ダウンロードは、Euro-Office の公式の版ではありません。中の `JA-OFFICE-FIXES.txt` に、変えた所、日付、元のコードの場所を書いています。
+ONLYOFFICE の版は配りません(下の「ライセンスと表示」)。
+
 ## 使い方(Euro-Office)
 
 Euro-Office 9.3.6 にも、同じ `build.py` でパッチを当てます。
@@ -408,7 +428,9 @@ SDKJS_PRODUCT=cell node tests/sdkjs_node/qunit.js work/sdkjs/tests/cell/spreadsh
 - パッチとスクリプトは GNU Affero General Public License v3.0(AGPL-3.0)です([LICENSE](LICENSE))。
   パッチは ONLYOFFICE の sdkjs と web-apps(どちらも AGPL-3.0)に手を入れたものです。
 - ONLYOFFICE is a trademark of Ascensio System SIA. このリポジトリは ONLYOFFICE の公式の物ではありません。
-- 手を入れた実行ファイルは配りません。利用者が公式の版を取り、手元でパッチを当てます。
+- ONLYOFFICE の、手を入れた実行ファイルは配りません。ONLYOFFICE の追加の条件は、ロゴを残すことを求め、名前を使う権利を与えていないためです。
+  利用者が公式の版を取り、手元でパッチを当てます。
+- Euro-Office は、追加の条件の無い AGPL-3.0 です。パッチを当てた版を、Releases からダウンロードできるようにしています。
 - 1 つ目のパッチは、Yuito Murase さん(zeptometer)が ONLYOFFICE に出した
   [ONLYOFFICE/sdkjs#4885](https://github.com/ONLYOFFICE/sdkjs/pull/4885) と同じ直しに、試験を足したものです。
 
@@ -459,7 +481,7 @@ line breaking, vertical writing, dates in the Japanese era, Japanese text functi
 
 ### Use (Linux)
 
-No modified binaries are distributed. `build.py` downloads the official ONLYOFFICE and applies the
+No modified ONLYOFFICE binaries are distributed. `build.py` downloads the official ONLYOFFICE and applies the
 patches on your machine. You do not need to install ONLYOFFICE first, and an installed ONLYOFFICE
 is not changed; you may uninstall it.
 
@@ -487,6 +509,18 @@ the app they had; the presentation editor is the official one.
 - To stop using it, run `python3 build.py unmenu`, which removes the menu entry and gives the
   documents back to the system's default app, then delete the folder.
 - The patched app is not updated automatically.
+
+### Download (Euro-Office)
+
+Euro-Office 9.3.6 with the patches can be downloaded from the
+[Releases](https://github.com/aiseed-dev/ja-office-fixes/releases) of this repository, built from the official
+release by GitHub Actions (`.github/workflows/euro-office-release.yml`): a `.tar.xz` for Linux (run
+`ja-office-fixes` in the folder), a `.zip` for Windows (run `DesktopEditors.exe`) and a `.zip` for a Mac with Apple
+silicon (move "Office (Euro-Office).app" to Applications and run
+`xattr -dr com.apple.quarantine "/Applications/Office (Euro-Office).app"` once). They are not official
+Euro-Office builds; JA-OFFICE-FIXES.txt in each says what was changed and where the source is. Modified
+ONLYOFFICE builds are not offered, as ONLYOFFICE's additional terms ask to keep its logo and give no right to its
+name.
 
 ### Use (Euro-Office)
 

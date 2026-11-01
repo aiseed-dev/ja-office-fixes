@@ -1,0 +1,65 @@
+# Build Euro-Office with the Japanese patches on each platform and put the
+# downloads on a draft release of the tag, for the maintainer to check and
+# publish. Started by pushing a tag euro-office-*, or by hand (then the
+# downloads are only kept as artifacts of the run for a week).
+name: Euro-Office downloads
+
+on:
+  push:
+    tags: ['euro-office-*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
+              --notes "Euro-Office 9.3.6 with the Japanese patches of ja-office-fixes. Not an official Euro-Office build; see JA-OFFICE-FIXES.txt in each download."
+
+  package:
+    needs: release
+    if: ${{ !failure() && !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, windows-11-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Let git use long paths on Windows (web-apps has deep ones)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+      - run: python build.py fetch --target euro-office
+      - run: python build.py build --target euro-office
+      - run: python build.py install --target euro-office
+      - run: python build.py package --target euro-office
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ja-office-fixes-euro-office-${{ matrix.os }}
+          path: dist/*
+          retention-days: 7
+          compression-level: 0
+      - name: Put the download on the draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber

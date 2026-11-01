@@ -55,14 +55,45 @@ Modifications (2026-10-10 and 2026-10-11):
   `view/ParagraphSettings.js` and the en and ja locales: the Asian and Latin
   text fonts in the Font tab of the paragraph advanced settings.
 
+Modifications (2026-10-31 and 2026-11-01):
+
+- `word/Editor/Paragraph/RunContent/Text.js`,
+  `word/Editor/Paragraph/TextShaper.js`: a quarter space between kanji or
+  kana and Latin letters or digits; tests in
+  `tests/word/document-calculation/paragraph/paragraph-lines.js`.
+- `cell/model/FormulaObjects/textanddataFunctions.js`: NUMBERSTRING,
+  DATESTRING and PHONETIC, DOLLAR (YEN) in the Japanese locale, and JIS
+  kept as DBCS in files; `cell/model/FormulaObjects/_xlfnFunctions.js`: the
+  empty DBCS stub removed; tests in
+  `tests/cell/spreadsheet-calculation/formula-tests/textAndDataTests.js`
+  and the function list in `tests/cell/spreadsheet-calculation/FormulaTrace.js`.
+- web-apps `apps/spreadsheeteditor/main/resources/formula-lang/ja.json`: DBCS
+  shown as JIS.
+
+## Euro-Office
+
+The same patches apply to Euro-Office (https://github.com/Euro-Office), a
+fork of ONLYOFFICE licensed under the GNU Affero General Public License
+v3.0. `build.py --target euro-office` builds it with them.
+
+The downloads of the patched Euro-Office (the releases of this repository,
+built by `.github/workflows/euro-office-release.yml`) are modified versions
+of Euro-Office. They are not official Euro-Office builds. Each one has
+JA-OFFICE-FIXES.txt, which says what was changed, when, and where the source
+is: the patches of this repository at the commit it names, applied to the
+Euro-Office commits in `build.py`; the rest is the official release of
+https://github.com/Euro-Office/DesktopEditors.
+
 ## Trademarks
 
 ONLYOFFICE is a trademark of Ascensio System SIA. This project is not
 affiliated with, endorsed by or sponsored by Ascensio System SIA. The name
 ONLYOFFICE is used only to say what the patches apply to.
 
-No modified ONLYOFFICE binaries are distributed here. `build.py` downloads
-the official release and applies the patches on the user's machine.
+No modified ONLYOFFICE binaries are distributed here: ONLYOFFICE's
+additional terms ask to keep its logo and give no right to its name.
+`build.py` downloads the official release and applies the patches on the
+user's machine. Patched builds are offered only for Euro-Office (see above).
 
 ## Credits
 
