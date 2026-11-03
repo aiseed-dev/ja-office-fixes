@@ -84,6 +84,12 @@ is: the patches of this repository at the commit it names, applied to the
 Euro-Office commits in `build.py`; the rest is the official release of
 https://github.com/Euro-Office/DesktopEditors.
 
+The Flatpak download also has MIT Kerberos (krb5 1.22.2,
+https://kerberos.org, built from its source by
+`flatpak/io.github.aiseed_dev.JaOfficeFixes.yml`), as Euro-Office's Qt needs
+libgssapi_krb5 and the Flatpak runtime lacks it. Its license is in the
+Flatpak at /app/share/licenses/krb5/NOTICE.
+
 ## Trademarks
 
 ONLYOFFICE is a trademark of Ascensio System SIA. This project is not

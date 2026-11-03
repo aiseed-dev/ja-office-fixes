@@ -314,11 +314,16 @@ docx をダブルクリックして開くようにするときは、Finder で d
 
 | ファイル | 使う所 |
 |---|---|
+| `ja-office-fixes-euro-office-9.3.6-linux-x86_64.flatpak`(`-linux-aarch64`) | Flatpak の使える Linux |
 | `ja-office-fixes-euro-office_9.3.6-0+ja<日付>_amd64.deb`(`_arm64.deb`) | Ubuntu、Debian |
 | `ja-office-fixes-euro-office-9.3.6-linux-x86_64.tar.xz`(`-linux-aarch64`) | ほかの Linux |
 | `ja-office-fixes-euro-office-9.3.6-windows-x64.zip`(`-windows-arm64`) | Windows |
 | `ja-office-fixes-euro-office-9.3.6-macos-arm64.zip` | Mac(Apple シリコン) |
 
+- Flatpak: `flatpak install --user ./ja-office-fixes-euro-office-9.3.6-linux-x86_64.flatpak` で入れます。
+  ファイルをダブルクリックして、「ソフトウェア」から入れることもできます。土台(org.freedesktop.Platform 26.08)は
+  Flathub から入ります。公式の Euro-Office とは別のアプリとして入るので、両方を使えます。
+  自動では新しい版になりません。新しい版は、新しいファイルを入れ直します。
 - Ubuntu、Debian: `sudo apt install ./ja-office-fixes-euro-office_*.deb` で入れます。メニューに Euro-Office が出て、
   文書をダブルクリックで開けます。公式の Euro-Office の .deb と同じ場所に入るので、公式の版と入れ替わります。
   公式の版に戻すときは、公式の .deb を入れ直します。
@@ -518,7 +523,9 @@ the app they had; the presentation editor is the official one.
 
 Euro-Office 9.3.6 with the patches can be downloaded from the
 [Releases](https://github.com/aiseed-dev/ja-office-fixes/releases) of this repository, built from the official
-release by GitHub Actions (`.github/workflows/euro-office-release.yml`): a `.deb` for Ubuntu and Debian
+release by GitHub Actions (`.github/workflows/euro-office-release.yml`): a `.flatpak` bundle
+(`flatpak install --user ./ja-office-fixes-euro-office-*.flatpak`; the runtime comes from Flathub, and it sits beside
+the official Euro-Office), a `.deb` for Ubuntu and Debian
 (`sudo apt install ./ja-office-fixes-euro-office_*.deb`; it takes the place of the official Euro-Office package), a
 `.tar.xz` for other Linux (run `ja-office-fixes` in the folder), a `.zip` for Windows (run `DesktopEditors.exe`) and a `.zip` for a Mac with Apple
 silicon (move "Office (Euro-Office).app" to Applications and run

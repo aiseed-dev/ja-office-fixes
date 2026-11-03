@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.aiseed_dev.JaOfficeFixes</id>
+  <name>ja-office-fixes (Euro-Office)</name>
+  <summary>Euro-Office with the Japanese patches</summary>
+  <summary xml:lang="ja">日本語のパッチを当てた Euro-Office</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <developer id="io.github.aiseed_dev">
+    <name>ja-office-fixes</name>
+  </developer>
+  <description>
+    <p>
+      Euro-Office with the Japanese patches of ja-office-fixes: Japanese line breaking and kinsoku,
+      vertical text, Japanese era dates, kanji numbers, Japanese fonts and the Japanese Excel functions.
+      It is not an official Euro-Office build.
+    </p>
+    <p xml:lang="ja">
+      日本語のパッチ(ja-office-fixes)を当てた Euro-Office です。日本語の折り返しと禁則、縦書き、和暦、漢数字、
+      日本語の書体、Excel の日本語の関数を直しています。Euro-Office の公式の版ではありません。
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.aiseed_dev.JaOfficeFixes.desktop</launchable>
+  <url type="homepage">https://github.com/aiseed-dev/ja-office-fixes</url>
+  <url type="bugtracker">https://github.com/aiseed-dev/ja-office-fixes/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="9.3.6" date="2026-11-03"/>
+  </releases>
+</component>

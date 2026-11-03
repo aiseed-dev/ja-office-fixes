@@ -45,6 +45,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Get Flatpak and Flathub on Linux (for the .flatpak)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
       - name: Let git use long paths on Windows (web-apps has deep ones)
         if: runner.os == 'Windows'
         run: git config --global core.longpaths true

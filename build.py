@@ -126,9 +126,13 @@ a zip of the app on a Mac (signed again ad hoc, as for install). On Linux it
 also makes ja-office-fixes-euro-office_9.3.6-0+ja<date>_<arch>.deb: the
 official deb with the files install changes put in, and its control renamed
 to conflict with and replace the official package (the same paths, so its
-launcher, menu entry and file types stay). Each has JA-OFFICE-FIXES.txt in
-it: that the build is modified and when, what changed, and where the source
-is (AGPL-3.0, sections 5 a and 6). Euro-Office's code has no terms beyond the
+launcher, menu entry and file types stay), and
+ja-office-fixes-euro-office-9.3.6-linux-<arch>.flatpak: the app built by
+flatpak/io.github.aiseed_dev.JaOfficeFixes.yml on org.freedesktop.Platform,
+with krb5 (Qt's network library needs libgssapi_krb5, which the runtime
+lacks); installing the bundle gets the runtime from Flathub. Each has
+JA-OFFICE-FIXES.txt in it: that the build is modified and when, what changed,
+and where the source is (AGPL-3.0, sections 5 a and 6). Euro-Office's code has no terms beyond the
 AGPL; ONLYOFFICE's ask to keep its logo and give no right to its name, so
 package refuses the onlyoffice target.
 .github/workflows/euro-office-release.yml runs it on GitHub's machines for a
@@ -278,6 +282,9 @@ License: GNU AGPL v3.0 (LICENSE.txt).
 """
 # The name of the deb on Linux
 DEB_NAME = "ja-office-fixes-euro-office"
+# The Flatpak on Linux
+FLATPAK_ID = "io.github.aiseed_dev.JaOfficeFixes"
+FLATPAK_MANIFEST = ROOT / "flatpak" / f"{FLATPAK_ID}.yml"
 # The shortcut in the Start menu on Windows
 WIN_SHORTCUT = (pathlib.Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs"
                 / "ja-office-fixes (Euro-Office).lnk")
@@ -671,6 +678,8 @@ def package() -> None:
             env={"XZ_OPT": "-9 -T0"})
         print("packed", out)
         out = deb()
+        print("packed", out)
+        out = flatpak(name)
     print("packed", out)
 
 
@@ -723,6 +732,24 @@ def deb() -> pathlib.Path:
     out = DIST / f"{DEB_NAME}_{version}_{arch}.deb"
     run("dpkg-deb", "--root-owner-group", "-Zxz", "-z9", "-b", str(tree), str(out))
     shutil.rmtree(tree)
+    return out
+
+
+def flatpak(name: str) -> pathlib.Path:
+    """A Flatpak bundle of the patched app, built by flatpak/ (see "Downloads" above)"""
+    if shutil.which("flatpak-builder"):
+        builder = ["flatpak-builder"]
+    elif shutil.which("flatpak"):
+        builder = ["flatpak", "run", "org.flatpak.Builder"]
+    else:
+        sys.exit("making the Flatpak needs flatpak and flatpak-builder (or org.flatpak.Builder)")
+    work = WORK / "flatpak"
+    run(*builder, "--user", "--install-deps-from=flathub", "--force-clean", "--disable-rofiles-fuse",
+        f"--state-dir={work / 'state'}", f"--repo={work / 'repo'}", str(work / "build"), str(FLATPAK_MANIFEST))
+    out = DIST / f"{name}.flatpak"
+    # The runtime comes from Flathub when the bundle is installed
+    run("flatpak", "build-bundle", "--runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo",
+        str(work / "repo"), str(out), FLATPAK_ID)
     return out
 
 

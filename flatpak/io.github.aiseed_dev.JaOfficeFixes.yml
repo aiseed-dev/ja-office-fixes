@@ -1,0 +1,69 @@
+# Euro-Office with the Japanese patches, as a Flatpak bundle (build.py
+# package makes it from the patched app in work/euro-office/desktop)
+id: io.github.aiseed_dev.JaOfficeFixes
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+command: ja-office-fixes
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=home
+  - --talk-name=org.freedesktop.Notifications
+modules:
+  # Qt's network library needs libgssapi_krb5, which the runtime lacks
+  - name: krb5
+    subdir: src
+    config-opts:
+      - --disable-static
+      - --disable-rpath
+      - --without-ldap
+    # Without krb5's -Werror=discarded-qualifiers: glibc 2.42's strchr keeps const
+    make-args:
+      - WARN_CFLAGS=
+    post-install:
+      - install -Dm644 ../NOTICE /app/share/licenses/krb5/NOTICE
+    cleanup:
+      - /bin
+      - /sbin
+      - /include
+      - /share/et
+      - /share/examples
+      - /share/locale
+      - /share/man
+      - /var
+      - /lib/pkgconfig
+      - /lib/krb5
+    sources:
+      - type: archive
+        url: https://kerberos.org/dist/krb5/1.22/krb5-1.22.2.tar.gz
+        sha256: 3243ffbc8ea4d4ac22ddc7dd2a1dc54c57874c40648b60ff97009763554eaf13
+
+  - name: euro-office
+    buildsystem: simple
+    build-commands:
+      - cp -a opt/euro-office/euro-office /app/euro-office
+      - install -Dm755 ja-office-fixes /app/bin/ja-office-fixes
+      - for size in 16 24 32 48 64 128 256; do install -Dm644 usr/share/icons/hicolor/${size}x${size}/apps/euro-office-euro-office.png
+        /app/share/icons/hicolor/${size}x${size}/apps/${FLATPAK_ID}.png; done
+      # The package's own entry, started by our launcher, under our name
+      - sed -e 's|^Exec=/usr/bin/euro-office-euro-office|Exec=ja-office-fixes|'
+        -e "s|^Icon=.*|Icon=${FLATPAK_ID}|" -e '0,/^Name=.*/s//Name=ja-office-fixes (Euro-Office)/'
+        usr/share/applications/euro-office-euro-office.desktop > ${FLATPAK_ID}.desktop
+      - install -Dm644 ${FLATPAK_ID}.desktop /app/share/applications/${FLATPAK_ID}.desktop
+      - install -Dm644 ${FLATPAK_ID}.metainfo.xml /app/share/metainfo/${FLATPAK_ID}.metainfo.xml
+    sources:
+      - type: dir
+        path: ../work/euro-office/desktop
+        skip:
+          - orig-sdkjs-cell
+          - orig-sdkjs-word
+          - orig-web-apps-documenteditor
+          - orig-formula-lang-ja.json
+      - type: file
+        path: ja-office-fixes
+      - type: file
+        path: io.github.aiseed_dev.JaOfficeFixes.metainfo.xml
