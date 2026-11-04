@@ -2,7 +2,7 @@
 // its tests can run here. SDKJS names another checkout; SDKJS_PRODUCT=cell
 // loads the spreadsheet editor instead of the word one
 const fs = require("fs"), vm = require("vm"), path = require("path");
-const SDK = path.resolve(process.env.SDKJS || path.join(__dirname, "../../work/sdkjs"));
+const SDK = path.resolve(process.env.SDKJS || path.join(__dirname, "../../work/euro-office/sdkjs"));
 // A stub that accepts any property access or call
 function stub(name) {
   const f = function () { return stub(name + "()"); };

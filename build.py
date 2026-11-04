@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Fetch, patch, build and start ONLYOFFICE Desktop Editors or Euro-Office with the Japanese patches.
+"""Fetch, patch, build and start Euro-Office (or ONLYOFFICE Desktop Editors) with the Japanese patches.
 
-    python3 build.py fetch     # get ONLYOFFICE sdkjs, web-apps and the desktop package (Linux or Mac)
+    python3 build.py fetch     # get sdkjs, web-apps and the desktop package
     python3 build.py build     # apply patches/sdkjs/*.patch and patches/web-apps/*.patch to the
                                # tag and build the editors; when the patches or the tag changed,
                                # apply them again
@@ -11,12 +11,13 @@
     python3 build.py menu      # add the patched app to the desktop menu, and open documents with it
     python3 build.py unmenu    # take it out of the menu and give the documents back
     python3 build.py all       # fetch, build, install and menu
-    python3 build.py package --target euro-office
-                               # pack the installed app for download into dist/
+    python3 build.py package   # pack the installed app for download into dist/
                                # (see "Downloads" below)
 
-With --target euro-office, each command works on Euro-Office 9.3.6 (Linux,
-Mac or Windows) instead, in work/euro-office/; see "Euro-Office" below.
+Each command works on Euro-Office 9.3.6 (Linux, Mac or Windows), in
+work/euro-office/; see "Euro-Office" below. With --target onlyoffice, it
+works on ONLYOFFICE Desktop Editors 9.4.0 (Linux or Mac) instead, in work/,
+as described first here (it was the default before 2026-11-04).
 
 Everything goes into work/ next to this file:
 
@@ -160,7 +161,7 @@ def target_arg() -> str:
             return sys.argv[i + 1]
         if arg.startswith("--target="):
             return arg.split("=", 1)[1]
-    return "onlyoffice"
+    return "euro-office"
 
 
 TARGET = target_arg()
@@ -171,9 +172,9 @@ MAC = sys.platform == "darwin"
 WIN = sys.platform == "win32"
 ARM = platform.machine().lower() in ("arm64", "aarch64")
 if WIN and not EURO:
-    sys.exit("on Windows, only the euro-office target works: add --target euro-office")
+    sys.exit("on Windows, only Euro-Office works: leave out --target onlyoffice")
 if EURO and MAC and not ARM:
-    sys.exit("Euro-Office has a Mac app for Apple silicon only")
+    sys.exit("Euro-Office has a Mac app for Apple silicon only: on an Intel Mac, add --target onlyoffice")
 
 ROOT = pathlib.Path(__file__).resolve().parent
 if EURO:
@@ -646,7 +647,7 @@ def package() -> None:
     """Pack the installed app into dist/ for download, with a notice of the
     changes (see "Downloads" above)"""
     if not EURO:
-        sys.exit("package works with --target euro-office only: ONLYOFFICE's terms ask to keep its logo and "
+        sys.exit("package works with Euro-Office only: ONLYOFFICE's terms ask to keep its logo and "
                  "give no right to its name, so modified ONLYOFFICE builds are not passed on")
     if MAC:
         ours_or_exit()

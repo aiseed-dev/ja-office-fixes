@@ -74,7 +74,7 @@ Modifications (2026-10-31 and 2026-11-01):
 
 The same patches apply to Euro-Office (https://github.com/Euro-Office), a
 fork of ONLYOFFICE licensed under the GNU Affero General Public License
-v3.0. `build.py --target euro-office` builds it with them.
+v3.0. `build.py` builds it with them (ONLYOFFICE with `--target onlyoffice`).
 
 The downloads of the patched Euro-Office (the releases of this repository,
 built by `.github/workflows/euro-office-release.yml`) are modified versions
