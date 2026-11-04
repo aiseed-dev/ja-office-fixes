@@ -45,6 +45,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      # The app, the deb's tree and the Flatpak's build fill the runner's
+      # disk; the tools it comes with that this does not use make room
+      - name: Make room on Linux
+        if: runner.os == 'Linux'
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
       # Ubuntu's flatpak-builder, as org.flatpak.Builder installs through
       # D-Bus, which the runner has no session of
       - name: Get Flatpak, flatpak-builder and the runtime on Linux (for the .flatpak)
